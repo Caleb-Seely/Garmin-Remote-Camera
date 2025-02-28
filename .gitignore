@@ -1,34 +1,96 @@
-# Gradle files
-.gradle/
+# Garmin Connect IQ specific
+/bin/
+/build/
+/release/
+*.prg
+*.iq
+*.prg.debug.xml
+*.jungle
+simulator.json
+monkey.jungle
+*.prg.debug.xml.tmp
+
+# Android specific
+*.apk
+*.ap_
+*.aab
+*.dex
+
+# Generated files
+bin/
+gen/
+out/
 build/
-
-# Local configuration file (sdk path, etc)
-local.properties
-developer_key
-
-# Log/OS Files
-*.log
-
-# Android Studio generated files and folders
+.gradle/
 captures/
 .externalNativeBuild/
 .cxx/
-*.apk
-output.json
 
-# IntelliJ
+# Local configuration files
+local.properties
+proguard-rules.pro
+*.pro
+
+# Log/OS Files
+*.log
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Android Studio / IntelliJ IDEA specific
 *.iml
 .idea/
-misc.xml
-deploymentTargetDropDown.xml
-render.experimental.xml
+.idea/workspace.xml
+.idea/tasks.xml
+.idea/gradle.xml
+.idea/assetWizardSettings.xml
+.idea/dictionaries
+.idea/libraries
+.idea/caches
+.idea/modules.xml
+.idea/navEditor.xml
+
+# VS Code specific
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+*.code-workspace
+
+# Eclipse specific
+.classpath
+.project
+.settings/
+
+# Garmin manifest files can be sensitive, include the sample but ignore real ones
+!/manifest.xml.sample
 
 # Keystore files
 *.jks
 *.keystore
+developer_key
 
 # Google Services (e.g. APIs or Firebase)
 google-services.json
+google-services/*.json
 
-# Android Profiling
-*.hprof
+# Other temporary and build files
+.tmp/
+tmp/
+temp/
+*.tmp
+*.bak
+*.swp
+*~.nib
+*.class
+*~
+
+# Monkey C specific
+.annotations
+.api
+*.ciq
