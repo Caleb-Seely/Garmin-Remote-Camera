@@ -1,5 +1,6 @@
 <strings>
-    <string id="AppName">GarminCameraRemote</string>
+    
+    <string id="AppName">Camera Remote</string>
 
     <string id="prompt">Click the menu button</string>
 
