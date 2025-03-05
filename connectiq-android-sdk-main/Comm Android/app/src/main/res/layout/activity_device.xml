@@ -22,22 +22,33 @@
         android:layout_height="wrap_content"
         android:layout_margin="16dp"
         android:orientation="vertical"
-        app:layout_constraintStart_toStartOf="parent"
+        android:background="#80000000"
+        android:padding="20dp"
+        app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintTop_toTopOf="parent">
 
         <Button
             android:id="@+id/openapp"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Open App"
+            android:text="@string/open_app_open"
             android:textSize="12sp" />
 
         <Button
             android:id="@+id/send_test_msg_button"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Send Test Msg"
+            android:text="@string/tap_to_send"
             android:textSize="12sp" />
+
+        <ImageButton
+            android:id="@+id/camera_flip_button"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:layout_marginTop="8dp"
+            android:background="@android:color/transparent"
+            android:src="@android:drawable/ic_popup_sync"
+            android:contentDescription="@string/flip_camera" />
     </LinearLayout>
 
     <TextView
@@ -47,7 +58,7 @@
         android:layout_margin="16dp"
         android:background="#80000000"
         android:padding="8dp"
-        android:text="Camera ready"
+        android:text="@string/camera_ready"
         android:textColor="@android:color/white"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintStart_toStartOf="parent" />

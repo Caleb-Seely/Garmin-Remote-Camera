@@ -147,7 +147,11 @@ class DeviceActivity : Activity(), LifecycleOwner {
             viewFinder = findViewById(R.id.viewFinder)
 
             // Initialize managers
-            cameraManager = MyCameraManager(this, this, viewFinder)
+            cameraManager = MyCameraManager(this, this, viewFinder) { status ->
+                statusTextView.text = status
+                connectIQManager.sendMessage(status)
+            }
+            
             connectIQManager = ConnectIQManager(this, device, statusTextView) { delaySeconds ->
                 if (delaySeconds > 0) {
                     startCountdown(delaySeconds)
@@ -158,12 +162,14 @@ class DeviceActivity : Activity(), LifecycleOwner {
 
             // Set up click listeners
             openAppButtonView?.setOnClickListener { connectIQManager.openApp() }
+            findViewById<View>(R.id.camera_flip_button).setOnClickListener {
+                cameraManager.flipCamera()
+            }
 
             // Initialize camera
             if (allPermissionsGranted()) {
                 cameraManager.startCamera()
             } else {
-                Log.d(TAG, "Requesting camera permissions")
                 ActivityCompat.requestPermissions(
                     this, REQUIRED_PERMISSIONS, REQUEST_CODE_PERMISSIONS
                 )
@@ -239,19 +245,7 @@ class DeviceActivity : Activity(), LifecycleOwner {
     }
 
     private fun startCountdown(seconds: Int) {
-        countdownSeconds = seconds
-        countdownRunnable = object : Runnable {
-            override fun run() {
-                if (countdownSeconds > 0) {
-                    cameraManager.toggleFlash()
-                    countdownSeconds--
-                    handler.postDelayed(this, FLASH_DELAY)
-                } else {
-                    cameraManager.takePhoto()
-                }
-            }
-        }
-        handler.post(countdownRunnable!!)
+        cameraManager.takePhoto(seconds)
     }
 
     /**

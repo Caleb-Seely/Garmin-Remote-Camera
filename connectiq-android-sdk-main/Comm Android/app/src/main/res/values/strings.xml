@@ -6,11 +6,15 @@
 <resources>
 
     <string name="app_name">Comm</string>
+
+    <string name="camera_ready">Camera ready</string>
+    <string name="tap_to_send">Test Msg</string>
+    <string name="open_app_open">Watch App</string>
+    <string name="flip_camera">Flip Camera</string>
+
     <string name="load_devices">Reload Devices</string>
     <string name="initialization_error">Failed to initalize the SDK.\n</string>
     <string name="service_unavailable">The ConnectIQ service is unavailabe.</string>
-    <string name="tap_to_send">Tap message below to send to device.</string>
-    <string name="open_app_open">Tap here to open the Comm app on the device.</string>
     <string name="open_store">Tap here to open ConnectIQ Store.</string>
     <string name="open_app_already_open">The Comm app is already open on the device.</string>
     <string name="received_message">Received message from device.</string>
@@ -35,5 +39,7 @@
 
     <string name="missing_store_id">Missing App Store Id</string>
     <string name="missing_store_id_message">Please add a valid store app id for STORE_APP_ID in DeviceActivity.</string>
+
+
 
 </resources>
