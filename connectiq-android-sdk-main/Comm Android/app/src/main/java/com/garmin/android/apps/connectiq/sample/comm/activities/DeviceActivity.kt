@@ -6,14 +6,23 @@ package com.garmin.android.apps.connectiq.sample.comm.activities
 
 import android.app.Activity
 import android.app.AlertDialog
+import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.os.Build
 import android.os.Bundle
+import android.os.Environment
 import android.os.Parcelable
+import android.provider.MediaStore
 import android.util.Log
 import android.view.View
+import android.widget.Button
 import android.widget.TextView
 import android.widget.Toast
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.garmin.android.apps.connectiq.sample.comm.MessageFactory
@@ -24,10 +33,20 @@ import com.garmin.android.connectiq.IQApp
 import com.garmin.android.connectiq.IQDevice
 import com.garmin.android.connectiq.exception.InvalidStateException
 import com.garmin.android.connectiq.exception.ServiceUnavailableException
+import java.io.File
+import java.io.FileOutputStream
+import java.io.IOException
+import java.text.SimpleDateFormat
+import java.util.*
+import android.content.pm.ResolveInfo
+
 
 private const val TAG = "DeviceActivity"
 private const val EXTRA_IQ_DEVICE = "IQDevice"
 private const val COMM_WATCH_ID = "a3421feed289106a538cb9547ab12095"
+private const val CAMERA_PERMISSION_REQUEST = 100
+private const val STORAGE_PERMISSION_REQUEST = 101
+private const val CAMERA_REQUEST_CODE = 102
 
 // TODO Add a valid store app id.
 private const val STORE_APP_ID = ""
@@ -62,7 +81,7 @@ class DeviceActivity : Activity() {
         }
     }
 
-    public override fun onCreate(savedInstanceState: Bundle?) {
+    override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_device)
 
@@ -74,11 +93,15 @@ class DeviceActivity : Activity() {
         deviceStatusView = findViewById(R.id.devicestatus)
         openAppButtonView = findViewById(R.id.openapp)
         val openAppStoreView = findViewById<View>(R.id.openstore)
+        val cameraButton = findViewById<Button>(R.id.camera_button)
 
         deviceNameView?.text = device.friendlyName
         deviceStatusView?.text = device.status?.name
         openAppButtonView?.setOnClickListener { openMyApp() }
         openAppStoreView?.setOnClickListener { openStore() }
+        cameraButton.setOnClickListener { checkCameraPermissionAndOpen() }
+
+        printCameraAppDetails()
     }
 
     public override fun onResume() {
@@ -221,6 +244,197 @@ class DeviceActivity : Activity() {
                 "ConnectIQ service is unavailable.   Is Garmin Connect Mobile installed and running?",
                 Toast.LENGTH_LONG
             ).show()
+        }
+    }
+
+    private fun checkCameraPermissionAndOpen() {
+        when {
+            ContextCompat.checkSelfPermission(
+                this,
+                android.Manifest.permission.CAMERA
+            ) == PackageManager.PERMISSION_GRANTED -> {
+                openCamera()
+            }
+            shouldShowRequestPermissionRationale(android.Manifest.permission.CAMERA) -> {
+                showCameraPermissionRationale()
+            }
+            else -> {
+                ActivityCompat.requestPermissions(
+                    this,
+                    arrayOf(android.Manifest.permission.CAMERA),
+                    CAMERA_PERMISSION_REQUEST
+                )
+            }
+        }
+    }
+
+    private fun showCameraPermissionRationale() {
+        AlertDialog.Builder(this)
+            .setTitle("Camera Permission Required")
+            .setMessage("Camera permission is required to take photos.")
+            .setPositiveButton("Grant") { _, _ ->
+                ActivityCompat.requestPermissions(
+                    this,
+                    arrayOf(android.Manifest.permission.CAMERA),
+                    CAMERA_PERMISSION_REQUEST
+                )
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun openCamera() {
+        try {
+            // Create multiple camera intents
+            val intents = listOf(
+                Intent(MediaStore.ACTION_IMAGE_CAPTURE),
+                Intent("android.media.action.STILL_IMAGE_CAMERA"),
+                Intent("android.intent.action.CAMERA_BUTTON")
+            )
+
+            // Possible camera packages
+            val cameraPackages = listOf(
+                "com.google.android.GoogleCamera",
+                "com.android.camera2",
+                "com.google.pixel.camera.services",
+                "com.android.cameraextensions",
+                "com.google.android.apps.camera.services"
+            )
+
+            // Try each intent with package combinations
+            for (intent in intents) {
+                // First, try without specifying a package
+                val standardResolve = packageManager.resolveActivity(intent, PackageManager.MATCH_DEFAULT_ONLY)
+                if (standardResolve != null) {
+                    Log.d(TAG, "Standard camera intent resolved: ${standardResolve.activityInfo?.packageName ?: "Unknown Package"}")
+                    startActivityForResult(intent, CAMERA_REQUEST_CODE)
+                    return
+                }
+
+                // Then try with specific packages
+                for (pkg in cameraPackages) {
+                    val packagedIntent = Intent(intent).apply {
+                        setPackage(pkg)
+                    }
+
+                    val resolveInfo = packageManager.resolveActivity(packagedIntent, PackageManager.MATCH_DEFAULT_ONLY)
+                    if (resolveInfo != null) {
+                        Log.d(TAG, "Camera intent resolved with package: $pkg")
+                        try {
+                            startActivityForResult(packagedIntent, CAMERA_REQUEST_CODE)
+                            return
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Failed to start camera intent with package $pkg", e)
+                        }
+                    }
+                }
+            }
+
+            // Last resort: direct camera capture
+            val directCaptureIntent = Intent(MediaStore.ACTION_IMAGE_CAPTURE)
+            startActivityForResult(directCaptureIntent, CAMERA_REQUEST_CODE)
+        } catch (e: Exception) {
+            Log.e(TAG, "Comprehensive camera intent error", e)
+            Toast.makeText(this, "Error opening camera: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    // Diagnostic method to print camera app details
+    private fun printCameraAppDetails() {
+        val cameraApps = packageManager.getInstalledApplications(0)
+            .filter { it.packageName.contains("camera", ignoreCase = true) }
+
+        Log.d(TAG, "Camera-related apps:")
+        cameraApps.forEach { app ->
+            try {
+                Log.d(TAG, "Package: ${app.packageName}")
+                Log.d(TAG, "Name: ${packageManager.getApplicationLabel(app)}")
+            } catch (e: Exception) {
+                Log.e(TAG, "Error getting app details for ${app.packageName}", e)
+            }
+        }
+
+        // Check intent resolution
+        val cameraIntents = listOf(
+            Intent(MediaStore.ACTION_IMAGE_CAPTURE),
+            Intent("android.media.action.STILL_IMAGE_CAMERA"),
+            Intent("android.intent.action.CAMERA_BUTTON")
+        )
+
+        cameraIntents.forEach { intent ->
+            val resolveInfoList = packageManager.queryIntentActivities(intent, PackageManager.MATCH_ALL)
+            Log.d(TAG, "Intent: ${intent.action}")
+            Log.d(TAG, "Resolved Activities: ${resolveInfoList.size}")
+
+            resolveInfoList.forEach { resolveInfo ->
+                Log.d(TAG, "  Package: ${resolveInfo.activityInfo?.packageName}")
+                Log.d(TAG, "  Class: ${resolveInfo.activityInfo?.name}")
+            }
+        }
+    }
+
+    private fun savePhoto(bitmap: Bitmap) {
+        try {
+            // Create file name with timestamp
+            val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
+            val fileName = "PHOTO_${timeStamp}.jpg"
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                // Save using MediaStore (Android 10 and above)
+                val contentValues = ContentValues().apply {
+                    put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
+                    put(MediaStore.MediaColumns.MIME_TYPE, "image/jpeg")
+                    put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_PICTURES)
+                }
+
+                val uri = contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues)
+                uri?.let {
+                    contentResolver.openOutputStream(it)?.use { outputStream ->
+                        bitmap.compress(Bitmap.CompressFormat.JPEG, 100, outputStream)
+                    }
+                    Toast.makeText(this, "Photo saved successfully!", Toast.LENGTH_SHORT).show()
+                }
+            } else {
+                // Legacy storage for older Android versions
+                val imagesDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES)
+                val image = File(imagesDir, fileName)
+                FileOutputStream(image).use { out ->
+                    bitmap.compress(Bitmap.CompressFormat.JPEG, 100, out)
+                }
+                Toast.makeText(this, "Photo saved successfully!", Toast.LENGTH_SHORT).show()
+            }
+        } catch (e: IOException) {
+            e.printStackTrace()
+            Toast.makeText(this, "Failed to save photo", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
+        when (requestCode) {
+            CAMERA_PERMISSION_REQUEST -> {
+                if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                    openCamera()
+                } else {
+                    Toast.makeText(this, "Camera permission denied", Toast.LENGTH_SHORT).show()
+                }
+            }
+            else -> super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        }
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == CAMERA_REQUEST_CODE && resultCode == RESULT_OK) {
+            val imageBitmap = data?.extras?.get("data") as? Bitmap
+            if (imageBitmap != null) {
+                savePhoto(imageBitmap)
+            } else {
+                Toast.makeText(this, "Failed to capture photo", Toast.LENGTH_SHORT).show()
+            }
         }
     }
 }
