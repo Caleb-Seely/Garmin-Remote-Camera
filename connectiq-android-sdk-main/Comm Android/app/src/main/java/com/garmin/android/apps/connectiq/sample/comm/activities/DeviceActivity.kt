@@ -193,6 +193,7 @@ class DeviceActivity : Activity(), LifecycleOwner {
         countdownRunnable?.let { handler.removeCallbacks(it) }
         window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         cameraExecutor.shutdown()
+        isCameraActive = false
     }
 
     override fun onResume() {
@@ -211,10 +212,9 @@ class DeviceActivity : Activity(), LifecycleOwner {
     override fun onPause() {
         super.onPause()
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_PAUSE)
-        isCameraActive = false
+        // Don't set isCameraActive to false here, let the lifecycle handle it
+        // This allows the preview to continue when returning from background
 
-        // It is a good idea to unregister everything and shut things down to
-        // release resources and prevent unwanted callbacks.
         try {
             connectIQ.unregisterForDeviceEvents(device)
             connectIQ.unregisterForApplicationEvents(device, myApp)
@@ -449,7 +449,7 @@ class DeviceActivity : Activity(), LifecycleOwner {
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         isCameraOpen = false
-        
+
         if (requestCode == CAMERA_REQUEST_CODE) {
             if (resultCode == RESULT_OK) {
                 currentPhotoPath?.let { photoPath ->
@@ -457,7 +457,7 @@ class DeviceActivity : Activity(), LifecycleOwner {
                     val photoFile = File(photoPath)
                     val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
                     val fileName = "PHOTO_${timeStamp}.jpg"
-                    
+
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                         // For Android 10 and above, use MediaStore
                         val contentValues = ContentValues().apply {
@@ -481,12 +481,12 @@ class DeviceActivity : Activity(), LifecycleOwner {
                         if (!cameraDir.exists()) {
                             cameraDir.mkdirs()
                         }
-                        
+
                         val destFile = File(cameraDir, fileName)
                         photoFile.copyTo(destFile, overwrite = true)
                         Toast.makeText(this, "Photo saved successfully!", Toast.LENGTH_SHORT).show()
                     }
-                    
+
                     // Clean up the temporary file
                     photoFile.delete()
 
@@ -587,16 +587,15 @@ class DeviceActivity : Activity(), LifecycleOwner {
 
                     override fun onError(exc: ImageCaptureException) {
                         Log.e(TAG, "Photo capture failed: ${exc.message}", exc)
-                        // Try to reinitialize the camera on error
-                        isCameraActive = false
-                        startCamera()
+                        // Don't reinitialize camera on capture error, just log it
+                        // This allows the preview to continue working
                     }
                 }
             )
         } catch (e: Exception) {
             Log.e(TAG, "Error preparing photo capture", e)
-            isCameraActive = false
-            startCamera()
+            // Don't reinitialize camera on preparation error, just log it
+            // This allows the preview to continue working
         }
     }
 
@@ -627,16 +626,32 @@ class DeviceActivity : Activity(), LifecycleOwner {
                 // Select back camera as a default
                 val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
 
-                // Unbind all use cases before rebinding
-                cameraProvider.unbindAll()
+                try {
+                    // Unbind all use cases before rebinding
+                    cameraProvider.unbindAll()
 
-                // Bind use cases to camera
-                camera = cameraProvider.bindToLifecycle(
-                    this, cameraSelector, preview, imageCapture
-                )
-                isCameraInitialized = true
-                isCameraActive = true
-                Log.d(TAG, "Camera initialized and active")
+                    // Bind use cases to camera
+                    camera = cameraProvider.bindToLifecycle(
+                        this, cameraSelector, preview, imageCapture
+                    )
+                    isCameraInitialized = true
+                    isCameraActive = true
+                    Log.d(TAG, "Camera initialized and active")
+                } catch (exc: Exception) {
+                    Log.e(TAG, "Use case binding failed", exc)
+                    isCameraActive = false
+                    // Try to recover by unbinding and retrying
+                    try {
+                        cameraProvider.unbindAll()
+                        camera = cameraProvider.bindToLifecycle(
+                            this, cameraSelector, preview, imageCapture
+                        )
+                        isCameraActive = true
+                        Log.d(TAG, "Camera recovered after binding failure")
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Camera recovery failed", e)
+                    }
+                }
             } catch (exc: Exception) {
                 Log.e(TAG, "Camera initialization failed", exc)
                 isCameraActive = false
