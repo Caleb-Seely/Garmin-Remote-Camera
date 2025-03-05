@@ -39,6 +39,8 @@ import java.io.IOException
 import java.text.SimpleDateFormat
 import java.util.*
 import android.content.pm.ResolveInfo
+import android.net.Uri
+import androidx.core.content.FileProvider
 
 
 private const val TAG = "DeviceActivity"
@@ -47,6 +49,7 @@ private const val COMM_WATCH_ID = "a3421feed289106a538cb9547ab12095"
 private const val CAMERA_PERMISSION_REQUEST = 100
 private const val STORAGE_PERMISSION_REQUEST = 101
 private const val CAMERA_REQUEST_CODE = 102
+private const val FILE_PROVIDER_AUTHORITY = "com.garmin.android.apps.connectiq.sample.comm.fileprovider"
 
 // TODO Add a valid store app id.
 private const val STORE_APP_ID = ""
@@ -80,6 +83,8 @@ class DeviceActivity : Activity() {
             openAppButtonView?.setText(R.string.open_app_open)
         }
     }
+
+    private var currentPhotoPath: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -285,50 +290,41 @@ class DeviceActivity : Activity() {
 
     private fun openCamera() {
         try {
-            // Last resort: direct camera capture
-            val directCaptureIntent = Intent(MediaStore.ACTION_IMAGE_CAPTURE)
-            startActivityForResult(directCaptureIntent, CAMERA_REQUEST_CODE)
+            // Create the File where the photo should go
+            val photoFile = createImageFile()
+            currentPhotoPath = photoFile.absolutePath
+
+            // Get the content URI for the image file
+            val photoURI = FileProvider.getUriForFile(
+                this,
+                FILE_PROVIDER_AUTHORITY,
+                photoFile
+            )
+
+            // Create and start the camera intent
+            val takePictureIntent = Intent(MediaStore.ACTION_IMAGE_CAPTURE).apply {
+                putExtra(MediaStore.EXTRA_OUTPUT, photoURI)
+                addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+            }
+
+            // Start the camera activity directly
+            startActivityForResult(takePictureIntent, CAMERA_REQUEST_CODE)
         } catch (e: Exception) {
-            Log.e(TAG, "Comprehensive camera intent error", e)
-            Toast.makeText(this, "Error opening camera: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
+            Log.e(TAG, "Error opening camera", e)
+            Toast.makeText(this, "Error opening camera: ${e.message}", Toast.LENGTH_LONG).show()
         }
     }
-    
 
-    private fun savePhoto(bitmap: Bitmap) {
-        try {
-            // Create file name with timestamp
-            val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
-            val fileName = "PHOTO_${timeStamp}.jpg"
-
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                // Save using MediaStore (Android 10 and above)
-                val contentValues = ContentValues().apply {
-                    put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
-                    put(MediaStore.MediaColumns.MIME_TYPE, "image/jpeg")
-                    put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_PICTURES)
-                }
-
-                val uri = contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues)
-                uri?.let {
-                    contentResolver.openOutputStream(it)?.use { outputStream ->
-                        bitmap.compress(Bitmap.CompressFormat.JPEG, 100, outputStream)
-                    }
-                    Toast.makeText(this, "Photo saved successfully!", Toast.LENGTH_SHORT).show()
-                }
-            } else {
-                // Legacy storage for older Android versions
-                val imagesDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES)
-                val image = File(imagesDir, fileName)
-                FileOutputStream(image).use { out ->
-                    bitmap.compress(Bitmap.CompressFormat.JPEG, 100, out)
-                }
-                Toast.makeText(this, "Photo saved successfully!", Toast.LENGTH_SHORT).show()
-            }
-        } catch (e: IOException) {
-            e.printStackTrace()
-            Toast.makeText(this, "Failed to save photo", Toast.LENGTH_SHORT).show()
-        }
+    private fun createImageFile(): File {
+        // Create an image file name
+        val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
+        val imageFileName = "JPEG_${timeStamp}_"
+        val storageDir = getExternalFilesDir(Environment.DIRECTORY_PICTURES)
+        return File.createTempFile(
+            imageFileName,  /* prefix */
+            ".jpg",        /* suffix */
+            storageDir     /* directory */
+        )
     }
 
     override fun onRequestPermissionsResult(
@@ -351,11 +347,43 @@ class DeviceActivity : Activity() {
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode == CAMERA_REQUEST_CODE && resultCode == RESULT_OK) {
-            val imageBitmap = data?.extras?.get("data") as? Bitmap
-            if (imageBitmap != null) {
-                savePhoto(imageBitmap)
-            } else {
-                Toast.makeText(this, "Failed to capture photo", Toast.LENGTH_SHORT).show()
+            currentPhotoPath?.let { photoPath ->
+                // Move the photo to the public Pictures directory
+                val photoFile = File(photoPath)
+                val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
+                val fileName = "PHOTO_${timeStamp}.jpg"
+                
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    // For Android 10 and above, use MediaStore
+                    val contentValues = ContentValues().apply {
+                        put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
+                        put(MediaStore.MediaColumns.MIME_TYPE, "image/jpeg")
+                        put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DCIM + "/Camera")
+                    }
+
+                    val uri = contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues)
+                    uri?.let {
+                        contentResolver.openOutputStream(it)?.use { outputStream ->
+                            photoFile.inputStream().use { inputStream ->
+                                inputStream.copyTo(outputStream)
+                            }
+                        }
+                        Toast.makeText(this, "Photo saved successfully!", Toast.LENGTH_SHORT).show()
+                    }
+                } else {
+                    // For older Android versions
+                    val cameraDir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM), "Camera")
+                    if (!cameraDir.exists()) {
+                        cameraDir.mkdirs()
+                    }
+                    
+                    val destFile = File(cameraDir, fileName)
+                    photoFile.copyTo(destFile, overwrite = true)
+                    Toast.makeText(this, "Photo saved successfully!", Toast.LENGTH_SHORT).show()
+                }
+                
+                // Clean up the temporary file
+                photoFile.delete()
             }
         }
     }
