@@ -101,7 +101,7 @@ class DeviceActivity : Activity() {
         openAppStoreView?.setOnClickListener { openStore() }
         cameraButton.setOnClickListener { checkCameraPermissionAndOpen() }
 
-        printCameraAppDetails()
+//        printCameraAppDetails()
     }
 
     public override fun onResume() {
@@ -285,51 +285,6 @@ class DeviceActivity : Activity() {
 
     private fun openCamera() {
         try {
-            // Create multiple camera intents
-            val intents = listOf(
-                Intent(MediaStore.ACTION_IMAGE_CAPTURE),
-                Intent("android.media.action.STILL_IMAGE_CAMERA"),
-                Intent("android.intent.action.CAMERA_BUTTON")
-            )
-
-            // Possible camera packages
-            val cameraPackages = listOf(
-                "com.google.android.GoogleCamera",
-                "com.android.camera2",
-                "com.google.pixel.camera.services",
-                "com.android.cameraextensions",
-                "com.google.android.apps.camera.services"
-            )
-
-            // Try each intent with package combinations
-            for (intent in intents) {
-                // First, try without specifying a package
-                val standardResolve = packageManager.resolveActivity(intent, PackageManager.MATCH_DEFAULT_ONLY)
-                if (standardResolve != null) {
-                    Log.d(TAG, "Standard camera intent resolved: ${standardResolve.activityInfo?.packageName ?: "Unknown Package"}")
-                    startActivityForResult(intent, CAMERA_REQUEST_CODE)
-                    return
-                }
-
-                // Then try with specific packages
-                for (pkg in cameraPackages) {
-                    val packagedIntent = Intent(intent).apply {
-                        setPackage(pkg)
-                    }
-
-                    val resolveInfo = packageManager.resolveActivity(packagedIntent, PackageManager.MATCH_DEFAULT_ONLY)
-                    if (resolveInfo != null) {
-                        Log.d(TAG, "Camera intent resolved with package: $pkg")
-                        try {
-                            startActivityForResult(packagedIntent, CAMERA_REQUEST_CODE)
-                            return
-                        } catch (e: Exception) {
-                            Log.e(TAG, "Failed to start camera intent with package $pkg", e)
-                        }
-                    }
-                }
-            }
-
             // Last resort: direct camera capture
             val directCaptureIntent = Intent(MediaStore.ACTION_IMAGE_CAPTURE)
             startActivityForResult(directCaptureIntent, CAMERA_REQUEST_CODE)
@@ -338,40 +293,7 @@ class DeviceActivity : Activity() {
             Toast.makeText(this, "Error opening camera: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
         }
     }
-
-    // Diagnostic method to print camera app details
-    private fun printCameraAppDetails() {
-        val cameraApps = packageManager.getInstalledApplications(0)
-            .filter { it.packageName.contains("camera", ignoreCase = true) }
-
-        Log.d(TAG, "Camera-related apps:")
-        cameraApps.forEach { app ->
-            try {
-                Log.d(TAG, "Package: ${app.packageName}")
-                Log.d(TAG, "Name: ${packageManager.getApplicationLabel(app)}")
-            } catch (e: Exception) {
-                Log.e(TAG, "Error getting app details for ${app.packageName}", e)
-            }
-        }
-
-        // Check intent resolution
-        val cameraIntents = listOf(
-            Intent(MediaStore.ACTION_IMAGE_CAPTURE),
-            Intent("android.media.action.STILL_IMAGE_CAMERA"),
-            Intent("android.intent.action.CAMERA_BUTTON")
-        )
-
-        cameraIntents.forEach { intent ->
-            val resolveInfoList = packageManager.queryIntentActivities(intent, PackageManager.MATCH_ALL)
-            Log.d(TAG, "Intent: ${intent.action}")
-            Log.d(TAG, "Resolved Activities: ${resolveInfoList.size}")
-
-            resolveInfoList.forEach { resolveInfo ->
-                Log.d(TAG, "  Package: ${resolveInfo.activityInfo?.packageName}")
-                Log.d(TAG, "  Class: ${resolveInfo.activityInfo?.name}")
-            }
-        }
-    }
+    
 
     private fun savePhoto(bitmap: Bitmap) {
         try {
