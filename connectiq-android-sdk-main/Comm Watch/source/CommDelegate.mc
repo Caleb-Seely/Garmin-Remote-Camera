@@ -63,6 +63,7 @@ class BaseMenuDelegate extends WatchUi.MenuInputDelegate {
             menu.addItem("Hello World.", :hello);
             menu.addItem("Ackbar", :trap);
             menu.addItem("Garmin", :garmin);
+            menu.addItem("3 weeks", :test);
             delegate = new SendMenuDelegate();
         } else if(item == :setListener) {
             menu.setTitle("Listner Type");
@@ -93,8 +94,9 @@ class SendMenuDelegate extends WatchUi.MenuInputDelegate {
             Communications.transmit("IT'S A TRAP!", null, listener);
         } else if(item == :garmin) {
             Communications.transmit("ConnectIQ", null, listener);
+        } else if(item == :test) {
+            Communications.transmit("3 weeks", null, listener);
         }
-
         WatchUi.popView(SLIDE_IMMEDIATE);
     }
 }
