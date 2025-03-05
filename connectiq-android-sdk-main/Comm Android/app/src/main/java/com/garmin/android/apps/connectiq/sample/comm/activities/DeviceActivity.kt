@@ -55,14 +55,6 @@ import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
-private const val TAG = "DeviceActivity"
-private const val EXTRA_IQ_DEVICE = "IQDevice"
-private const val COMM_WATCH_ID = "a3421feed289106a538cb9547ab12095"
-private const val CAMERA_PERMISSION_REQUEST = 100
-private const val STORAGE_PERMISSION_REQUEST = 101
-private const val CAMERA_REQUEST_CODE = 102
-private const val FILE_PROVIDER_AUTHORITY = "com.garmin.android.apps.connectiq.sample.comm.fileprovider"
-private const val FLASH_DELAY = 1000L // 1 second between flash blinks
 
 // TODO Add a valid store app id.
 private const val STORE_APP_ID = ""
@@ -96,6 +88,7 @@ class DeviceActivity : Activity(), LifecycleOwner {
 
     private var deviceStatusView: TextView? = null
     private var openAppButtonView: TextView? = null
+    private lateinit var statusTextView: TextView
 
     private val connectIQ: ConnectIQ = ConnectIQ.getInstance()
     private lateinit var device: IQDevice
@@ -106,16 +99,16 @@ class DeviceActivity : Activity(), LifecycleOwner {
     private val openAppListener = ConnectIQ.IQOpenApplicationListener { _, _, status ->
         runOnUiThread {
             Log.d(TAG, "App status changed: ${status.name}")
-            Toast.makeText(applicationContext, "App Status: " + status.name, Toast.LENGTH_SHORT).show()
+        Toast.makeText(applicationContext, "App Status: " + status.name, Toast.LENGTH_SHORT).show()
 
-            if (status == ConnectIQ.IQOpenApplicationStatus.APP_IS_ALREADY_RUNNING) {
-                appIsOpen = true
-                openAppButtonView?.setText(R.string.open_app_already_open)
-            } else {
-                appIsOpen = false
-                openAppButtonView?.setText(R.string.open_app_open)
-            }
+        if (status == ConnectIQ.IQOpenApplicationStatus.APP_IS_ALREADY_RUNNING) {
+            appIsOpen = true
+            openAppButtonView?.setText(R.string.open_app_already_open)
+        } else {
+            appIsOpen = false
+            openAppButtonView?.setText(R.string.open_app_open)
         }
+    }
     }
 
     private var currentPhotoPath: String? = null
@@ -137,40 +130,21 @@ class DeviceActivity : Activity(), LifecycleOwner {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_device)
-
+        setupButtons()
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_CREATE)
 
         try {
-            device = intent.getParcelableExtra<Parcelable>(EXTRA_IQ_DEVICE) as IQDevice
-            myApp = IQApp(COMM_WATCH_ID)
-            appIsOpen = false
+        device = intent.getParcelableExtra<Parcelable>(EXTRA_IQ_DEVICE) as IQDevice
+        myApp = IQApp(COMM_WATCH_ID)
 
-            val deviceNameView = findViewById<TextView>(R.id.devicename)
-            deviceStatusView = findViewById(R.id.devicestatus)
-            openAppButtonView = findViewById(R.id.openapp) // Updated ID to match layout
-            val openAppStoreView = findViewById<View>(R.id.openstore)
-            val cameraButton = findViewById<Button>(R.id.camera_button)
-
-            deviceNameView?.text = device.friendlyName
-            deviceStatusView?.text = device.status?.name
-            openAppButtonView?.setOnClickListener { openMyApp() }
-            openAppStoreView?.setOnClickListener { openStore() }
-            cameraButton.setOnClickListener { checkCameraPermissionAndOpen() }
-
-            // Initialize camera manager
-            cameraManager = getSystemService(Context.CAMERA_SERVICE) as CameraManager
-            try {
-                cameraId = cameraManager?.cameraIdList?.firstOrNull()
-                Log.d(TAG, "Camera ID initialized: $cameraId")
-            } catch (e: CameraAccessException) {
-                Log.e(TAG, "Error accessing camera", e)
-            }
-
-            // Keep screen on for countdown
-            window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-
+            // Initialize views
+            statusTextView = findViewById(R.id.status_text)
+        openAppButtonView = findViewById(R.id.openapp)
             viewFinder = findViewById(R.id.viewFinder)
             cameraExecutor = Executors.newSingleThreadExecutor()
+
+            // Set up click listeners
+        openAppButtonView?.setOnClickListener { openMyApp() }
 
             // Initialize camera
             if (allPermissionsGranted()) {
@@ -181,9 +155,21 @@ class DeviceActivity : Activity(), LifecycleOwner {
                     this, REQUIRED_PERMISSIONS, REQUEST_CODE_PERMISSIONS
                 )
             }
+
+//            // Set up message list with just the test message
+//            val messagesAdapter = MessagesAdapter { onItemClick(it) }
+//            messagesAdapter.submitList(listOf("Send Test msg"))
+//            findViewById<RecyclerView>(android.R.id.list).apply {
+//                layoutManager = LinearLayoutManager(this@DeviceActivity)
+//                adapter = messagesAdapter
+//            }
+
+            // Keep screen on for countdown
+            window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+
         } catch (e: Exception) {
             Log.e(TAG, "Error in onCreate", e)
-            Toast.makeText(this, "Error initializing app: ${e.message}", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, "Error initializing camera: ${e.message}", Toast.LENGTH_LONG).show()
         }
     }
 
@@ -222,6 +208,33 @@ class DeviceActivity : Activity(), LifecycleOwner {
         }
     }
 
+    private fun setupButtons() {
+        findViewById<Button>(R.id.openapp).setOnClickListener {
+            openMyApp()
+        }
+
+        findViewById<Button>(R.id.send_test_msg_button).setOnClickListener {
+            sendTestMessage()
+        }
+    }
+    private fun sendTestMessage() {
+        val testMessage = "Test Message"
+        try {
+            connectIQ.sendMessage(device, myApp, testMessage) { _, _, status ->
+                runOnUiThread {
+                    Toast.makeText(this, "Send Message Status: ${status.name}", Toast.LENGTH_SHORT).show()
+                }
+            }
+        } catch (e: InvalidStateException) {
+            Toast.makeText(this, "ConnectIQ is not in a valid state", Toast.LENGTH_SHORT).show()
+        } catch (e: ServiceUnavailableException) {
+            Toast.makeText(
+                this,
+                "ConnectIQ service is unavailable. Is Garmin Connect Mobile installed and running?",
+                Toast.LENGTH_LONG
+            ).show()
+        }
+    }
     private fun openMyApp() {
         Toast.makeText(this, "Opening app...", Toast.LENGTH_SHORT).show()
 
@@ -279,22 +292,27 @@ class DeviceActivity : Activity(), LifecycleOwner {
                     }
                 }
 
+                runOnUiThread {
+                    statusTextView.text = if (delaySeconds > 0) {
+                        "Starting countdown: $delaySeconds seconds"
+                    } else {
+                        "Taking photo..."
+                    }
+                }
+
                 if (delaySeconds > 0) {
                     // Start countdown with flash
                     startCountdown(delaySeconds)
-                    Toast.makeText(this, "Starting countdown: $delaySeconds seconds", Toast.LENGTH_SHORT).show()
                 } else {
-                    // Ensure camera is active before taking photo
-                    if (!isCameraActive) {
-                        startCamera()
-                    }
                     // Take photo immediately
                     takePhoto()
                 }
             }
         } catch (e: InvalidStateException) {
             Log.e(TAG, "ConnectIQ is not in a valid state", e)
-            Toast.makeText(this, "ConnectIQ is not in a valid state", Toast.LENGTH_SHORT).show()
+            runOnUiThread {
+                statusTextView.text = "Error: ConnectIQ not ready"
+            }
         }
     }
 
@@ -305,7 +323,10 @@ class DeviceActivity : Activity(), LifecycleOwner {
                 ConnectIQ.IQApplicationInfoListener {
                 override fun onApplicationInfoReceived(app: IQApp) {
                     // This is a good thing. Now we can show our list of message options.
-                    buildMessageList()
+                    Log.d(TAG, "Building message list, useless i think")
+//                    buildMessageList()
+                     
+                    
                 }
 
                 override fun onApplicationNotInstalled(applicationId: String) {
@@ -336,16 +357,18 @@ class DeviceActivity : Activity(), LifecycleOwner {
     private fun onItemClick(message: Any) {
         try {
             connectIQ.sendMessage(device, myApp, message) { _, _, status ->
-                Toast.makeText(this@DeviceActivity, status.name, Toast.LENGTH_SHORT).show()
+                runOnUiThread {
+                    statusTextView.text = "Message sent: ${status.name}"
+                }
             }
         } catch (e: InvalidStateException) {
-            Toast.makeText(this, "ConnectIQ is not in a valid state", Toast.LENGTH_SHORT).show()
+            runOnUiThread {
+                statusTextView.text = "Error: ConnectIQ not ready"
+            }
         } catch (e: ServiceUnavailableException) {
-            Toast.makeText(
-                this,
-                "ConnectIQ service is unavailable.   Is Garmin Connect Mobile installed and running?",
-                Toast.LENGTH_LONG
-            ).show()
+            runOnUiThread {
+                statusTextView.text = "Error: Service unavailable"
+            }
         }
     }
 
