@@ -17,6 +17,17 @@ import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 
+//For the flash functionality
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+
+import android.hardware.camera2.CameraCharacteristics
+import android.hardware.camera2.CameraManager
+
+private val scope = CoroutineScope(Dispatchers.Main)
+
 class MyCameraManager(
     private val context: Context,
     private val lifecycleOwner: LifecycleOwner,
@@ -102,7 +113,7 @@ class MyCameraManager(
         Log.e(TAG, "Use case binding failed", exc)
         isCameraActive = false
         Toast.makeText(context, "Camera binding failed. Retrying...", Toast.LENGTH_SHORT).show()
-        
+
         try {
             cameraProvider.unbindAll()
             camera = cameraProvider.bindToLifecycle(
@@ -133,23 +144,28 @@ class MyCameraManager(
             return
         }
 
+
         if (delaySeconds > 0) {
-            // Start countdown with flash
-            var remainingSeconds = delaySeconds
-            val flashTimer = Timer()
-            flashTimer.scheduleAtFixedRate(object : TimerTask() {
-                override fun run() {
-                    ContextCompat.getMainExecutor(context).execute {
-                        if (remainingSeconds > 0) {
-                            toggleFlash()
-                            remainingSeconds--
-                        } else {
-                            flashTimer.cancel()
-                            capturePhoto(imageCapture)
-                        }
+            // Use coroutines for countdown instead of Timer
+            scope.launch {
+                var remainingSeconds = delaySeconds
+
+                while (remainingSeconds > 0) {
+                    if (remainingSeconds > 1) {
+                        // Regular countdown flash
+                        toggleFlash("normal", 0.2f)
+                    } else if (remainingSeconds == 1) {
+                        // Special signal when about to capture
+                        toggleFlash("final", 0.6f)
                     }
+
+                    remainingSeconds--
+                    delay(1000) // Wait 1 second between countdown steps
                 }
-            }, 0, 1000)
+
+                // After countdown completes
+                capturePhoto(imageCapture)
+            }
         } else {
             capturePhoto(imageCapture)
         }
@@ -200,14 +216,48 @@ class MyCameraManager(
         }
     }
 
-    fun toggleFlash() {
-        isFlashEnabled = !isFlashEnabled
-        imageCapture?.flashMode = if (isFlashEnabled) {
-            ImageCapture.FLASH_MODE_ON
-        } else {
-            ImageCapture.FLASH_MODE_OFF
+    // Modified toggleFlash function with pattern support
+    fun toggleFlash(pattern: String = "normal", brightness: Float = 0.5f) {
+        // We need to use the CameraX controls since the camera is already in use
+        when (pattern) {
+            "normal" -> {
+                // Make sure we're not trying to control a camera that's already in use
+                if (camera == null || imageCapture == null) return
+
+                // Basic flash for normal countdown
+                isFlashEnabled = true
+
+                // Use the existing CameraX torch control
+                camera?.cameraControl?.enableTorch(true)
+
+                // Turn off after delay
+                scope.launch {
+                    delay(100) // 100ms delay
+                    camera?.cameraControl?.enableTorch(false)
+                    isFlashEnabled = false
+                }
+            }
+            "final" -> {
+                // Triple flash for final second
+                if (camera == null || imageCapture == null) return
+
+                scope.launch {
+                    repeat(3) {
+                        // Turn on torch
+                        isFlashEnabled = true
+                        camera?.cameraControl?.enableTorch(true)
+
+                        delay(100) // On for 100ms
+
+                        // Turn off torch
+                        camera?.cameraControl?.enableTorch(false)
+                        isFlashEnabled = false
+
+                        delay(100) // Off for 100ms between flashes
+                    }
+                }
+            }
         }
-        camera?.cameraControl?.enableTorch(isFlashEnabled)
     }
 
     fun flipCamera() {
@@ -216,7 +266,7 @@ class MyCameraManager(
         } else {
             CameraSelector.DEFAULT_BACK_CAMERA
         }
-        
+
         val cameraProviderFuture = ProcessCameraProvider.getInstance(context)
         cameraProviderFuture.addListener({
             try {
@@ -242,4 +292,4 @@ class MyCameraManager(
     }
 
     fun isActive() = isCameraActive
-} 
+}
