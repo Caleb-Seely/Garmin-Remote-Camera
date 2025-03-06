@@ -25,6 +25,8 @@ import kotlinx.coroutines.launch
 
 import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CameraManager
+import android.widget.TextView
+import android.view.View
 
 private val scope = CoroutineScope(Dispatchers.Main)
 
@@ -32,7 +34,8 @@ class MyCameraManager(
     private val context: Context,
     private val lifecycleOwner: LifecycleOwner,
     private val viewFinder: PreviewView,
-    private val onPhotoTaken: (String) -> Unit = {}
+    private val onPhotoTaken: (String) -> Unit = {},
+    private val onCountdownUpdate: ((Int) -> Unit)? = null
 ) {
     companion object {
         private const val TAG = "MyCameraManager"
@@ -47,6 +50,8 @@ class MyCameraManager(
     private var isFlashEnabled = false
     private var currentCameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
     private var photoCount = 0
+    private var isFrontCamera = false
+    private lateinit var countdownText: TextView
 
     init {
         cameraExecutor = Executors.newSingleThreadExecutor()
@@ -144,13 +149,14 @@ class MyCameraManager(
             return
         }
 
-
         if (delaySeconds > 0) {
-            // Use coroutines for countdown instead of Timer
             scope.launch {
                 var remainingSeconds = delaySeconds
-
                 while (remainingSeconds > 0) {
+                    // Update countdown display if using front camera
+                    if (isFrontCamera) {
+                        onCountdownUpdate?.invoke(remainingSeconds)
+                    }
                     if (remainingSeconds > 1) {
                         // Regular countdown flash
                         toggleFlash("normal", 0.2f)
@@ -158,12 +164,13 @@ class MyCameraManager(
                         // Special signal when about to capture
                         toggleFlash("final", 0.6f)
                     }
-
                     remainingSeconds--
                     delay(1000) // Wait 1 second between countdown steps
                 }
-
-                // After countdown completes
+                // Clear countdown display
+                if (isFrontCamera) {
+                    onCountdownUpdate?.invoke(0)
+                }
                 capturePhoto(imageCapture)
             }
         } else {
@@ -232,7 +239,7 @@ class MyCameraManager(
 
                 // Turn off after delay
                 scope.launch {
-                    delay(100) // 100ms delay
+                    delay(50)
                     camera?.cameraControl?.enableTorch(false)
                     isFlashEnabled = false
                 }
@@ -242,12 +249,12 @@ class MyCameraManager(
                 if (camera == null || imageCapture == null) return
 
                 scope.launch {
-                    repeat(3) {
+                    repeat(2) {
                         // Turn on torch
                         isFlashEnabled = true
                         camera?.cameraControl?.enableTorch(true)
 
-                        delay(100) // On for 100ms
+                        delay(50)
 
                         // Turn off torch
                         camera?.cameraControl?.enableTorch(false)
@@ -262,8 +269,10 @@ class MyCameraManager(
 
     fun flipCamera() {
         currentCameraSelector = if (currentCameraSelector == CameraSelector.DEFAULT_BACK_CAMERA) {
+            isFrontCamera = true
             CameraSelector.DEFAULT_FRONT_CAMERA
         } else {
+            isFrontCamera = false
             CameraSelector.DEFAULT_BACK_CAMERA
         }
 

@@ -91,6 +91,7 @@ class DeviceActivity : Activity(), LifecycleOwner {
     private var deviceStatusView: TextView? = null
     private var openAppButtonView: TextView? = null
     private lateinit var statusTextView: TextView
+    private lateinit var countdownTextView: TextView
 
     private val connectIQ: ConnectIQ = ConnectIQ.getInstance()
     private lateinit var device: IQDevice
@@ -135,6 +136,8 @@ class DeviceActivity : Activity(), LifecycleOwner {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_device)
         setupButtons()
+        
+
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_CREATE)
 
         try {
@@ -143,15 +146,27 @@ class DeviceActivity : Activity(), LifecycleOwner {
 
             // Initialize views
             statusTextView = findViewById(R.id.status_text)
+            countdownTextView = findViewById(R.id.countdown_text)  //Front cam timer
             openAppButtonView = findViewById(R.id.openapp)
             viewFinder = findViewById(R.id.viewFinder)
 
             // Initialize managers
-            cameraManager = MyCameraManager(this, this, viewFinder) { status ->
-                statusTextView.text = status
-                connectIQManager.sendMessage(status)
-            }
-            
+            cameraManager = MyCameraManager(
+                this,
+                this,
+                viewFinder,
+                onPhotoTaken = { status ->
+                    statusTextView.text = status
+                    connectIQManager.sendMessage(status)
+                },
+                onCountdownUpdate = { seconds ->
+                    runOnUiThread {
+                        countdownTextView.text = if (seconds > 0) seconds.toString() else ""
+                        countdownTextView.visibility = if (seconds > 0) View.VISIBLE else View.GONE
+                    }
+                }
+            )
+
             connectIQManager = ConnectIQManager(this, device, statusTextView) { delaySeconds ->
                 if (delaySeconds > 0) {
                     startCountdown(delaySeconds)
