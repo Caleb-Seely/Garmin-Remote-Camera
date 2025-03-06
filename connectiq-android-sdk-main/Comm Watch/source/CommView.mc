@@ -61,7 +61,7 @@ class CommView extends WatchUi.View {
 
                 dc.drawText(dc.getWidth() / 2, 20,  Graphics.FONT_MEDIUM, "Strings Received:", Graphics.TEXT_JUSTIFY_CENTER);
                 for(i = 0; i < stringsSize; i += 1) {
-                    dc.drawText(dc.getWidth() / 2, y,  Graphics.FONT_SMALL, strings[i], Graphics.TEXT_JUSTIFY_CENTER);
+                    dc.drawText(dc.getWidth() / 2, y, Graphics.FONT_SMALL, "" + strings[i], Graphics.TEXT_JUSTIFY_CENTER);
                     y += 20;
                 }
              }

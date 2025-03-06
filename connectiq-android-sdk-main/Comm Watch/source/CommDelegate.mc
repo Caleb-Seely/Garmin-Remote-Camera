@@ -8,6 +8,9 @@ using Toybox.WatchUi;
 using Toybox.System;
 using Toybox.Communications;
 
+// No global variable definitions here to avoid redefinition errors
+// These are defined in CommApp.mc
+
 class CommListener extends Communications.ConnectionListener {
     function initialize() {
         Communications.ConnectionListener.initialize();
@@ -34,7 +37,7 @@ class CommInputDelegate extends WatchUi.BehaviorDelegate {
         menu.addItem("Send Data", :sendData);
         menu.addItem("Set Listener", :setListener);
         delegate = new BaseMenuDelegate();
-        WatchUi.pushView(menu, delegate, SLIDE_IMMEDIATE);
+        WatchUi.pushView(menu, delegate, WatchUi.SLIDE_IMMEDIATE);
 
         return true;
     }
@@ -64,10 +67,10 @@ class BaseMenuDelegate extends WatchUi.MenuInputDelegate {
             menu.addItem("Ackbar", :trap);
             menu.addItem("Garmin", :garmin);
             menu.addItem("3 weeks", :test);
+            menu.addItem("3", :three);
             delegate = new SendMenuDelegate();
         } else if(item == :setListener) {
-            menu.setTitle("Listner Type");
-            menu.addItem("Mailbox", :mailbox);
+            menu.setTitle("Listener Type");
             if(Communications has :registerForPhoneAppMessages) {
                 menu.addItem("Phone Application", :phone);
             }
@@ -76,7 +79,7 @@ class BaseMenuDelegate extends WatchUi.MenuInputDelegate {
             delegate = new ListnerMenuDelegate();
         }
 
-        WatchUi.pushView(menu, delegate, SLIDE_IMMEDIATE);
+        WatchUi.pushView(menu, delegate, WatchUi.SLIDE_IMMEDIATE);
     }
 }
 
@@ -96,8 +99,10 @@ class SendMenuDelegate extends WatchUi.MenuInputDelegate {
             Communications.transmit("ConnectIQ", null, listener);
         } else if(item == :test) {
             Communications.transmit("3 weeks", null, listener);
+        } else if(item == :three) {
+            Communications.transmit("3", null, listener);
         }
-        WatchUi.popView(SLIDE_IMMEDIATE);
+        WatchUi.popView(WatchUi.SLIDE_IMMEDIATE);
     }
 }
 
@@ -107,21 +112,17 @@ class ListnerMenuDelegate extends WatchUi.MenuInputDelegate {
     }
 
     function onMenuItem(item) {
-        if(item == :mailbox) {
-            Communications.setMailboxListener(mailMethod);
-        } else if(item == :phone) {
+        if(item == :phone) {
             if(Communications has :registerForPhoneAppMessages) {
                 Communications.registerForPhoneAppMessages(phoneMethod);
             }
         } else if(item == :none) {
             Communications.registerForPhoneAppMessages(null);
-            Communications.setMailboxListener(null);
         } else if(item == :phoneFail) {
             crashOnMessage = true;
             Communications.registerForPhoneAppMessages(phoneMethod);
         }
 
-        WatchUi.popView(SLIDE_IMMEDIATE);
+        WatchUi.popView(WatchUi.SLIDE_IMMEDIATE);
     }
 }
-
