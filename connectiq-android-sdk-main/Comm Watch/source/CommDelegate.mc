@@ -1,3 +1,4 @@
+// File: CommListeners.mc
 //
 // Copyright 2016 by Garmin Ltd. or its subsidiaries.
 // Subject to Garmin SDK License Agreement and Wearables
@@ -8,9 +9,7 @@ using Toybox.WatchUi;
 using Toybox.System;
 using Toybox.Communications;
 
-// No global variable definitions here to avoid redefinition errors
-// These are defined in CommApp.mc
-
+// Communication listener for transmit operations
 class CommListener extends Communications.ConnectionListener {
     function initialize() {
         Communications.ConnectionListener.initialize();
@@ -25,88 +24,98 @@ class CommListener extends Communications.ConnectionListener {
     }
 }
 
+// Main input delegate for the application
 class CommInputDelegate extends WatchUi.BehaviorDelegate {
     function initialize() {
         WatchUi.BehaviorDelegate.initialize();
     }
 
     function onMenu() {
-        var menu = new WatchUi.Menu();
-        var delegate;
-
-        menu.addItem("Send Data", :sendData);
-        menu.addItem("Set Listener", :setListener);
-        delegate = new BaseMenuDelegate();
-        WatchUi.pushView(menu, delegate, WatchUi.SLIDE_IMMEDIATE);
-
+        // Send time immediately rather than showing menu
+        var listener = new CommListener();
+        Communications.transmit(AppState.timeOptions[AppState.selectedIndex], null, listener);
         return true;
     }
 
     function onTap(event) {
-        if(page == 0) {
-            page = 1;
+        var screenWidth = System.getDeviceSettings().screenWidth;
+        var screenHeight = System.getDeviceSettings().screenHeight;
+        var centerX = screenWidth / 2;
+        var centerY = screenHeight / 2;
+        var radius;
+        
+        if (screenWidth < screenHeight) {
+            radius = screenWidth * 0.4;
         } else {
-            page = 0;
+            radius = screenHeight * 0.4;
         }
-        WatchUi.requestUpdate();
+        
+        // Calculate camera icon position
+        var iconX = centerX + (radius * 0.6);
+        var iconY = centerY - (radius * 0.6);
+        var iconRadius = 20; // Tap target size
+        
+        // Get tap coordinates
+        var coords = event.getCoordinates();
+        
+        if(AppState.page == 0) {
+            // Check if tap is on the camera icon area
+            if (isInCircle(coords[0], coords[1], iconX, iconY, iconRadius)) {
+                // Camera icon tapped - send the selected time
+                var listener = new CommListener();
+                Communications.transmit(AppState.timeOptions[AppState.selectedIndex], null, listener);
+            } else {
+                // Otherwise, cycle through time options
+                AppState.selectedIndex = (AppState.selectedIndex + 1) % AppState.timeOptions.size();
+                WatchUi.requestUpdate();
+            }
+        } else {
+            // Dismiss message and return to main screen
+            AppState.page = 0;
+            AppState.showMessageTimeout = 0;
+            WatchUi.requestUpdate();
+        }
         return true;
     }
-}
-
-class BaseMenuDelegate extends WatchUi.MenuInputDelegate {
-    function initialize() {
-        WatchUi.MenuInputDelegate.initialize();
+    
+    // Helper function to detect if a point is inside a circle
+    function isInCircle(x, y, centerX, centerY, radius) {
+        var dx = x - centerX;
+        var dy = y - centerY;
+        return (dx*dx + dy*dy) <= (radius*radius);
     }
 
-    function onMenuItem(item) {
-        var menu = new WatchUi.Menu();
-        var delegate = null;
-
-        if(item == :sendData) {
-            menu.addItem("Hello World.", :hello);
-            menu.addItem("Ackbar", :trap);
-            menu.addItem("10", :ten);
-            menu.addItem("5", :five);
-            menu.addItem("3", :three);
-            delegate = new SendMenuDelegate();
-        } else if(item == :setListener) {
-            menu.setTitle("Listener Type");
-            if(Communications has :registerForPhoneAppMessages) {
-                menu.addItem("Phone Application", :phone);
+    function onKey(evt) {
+        var key = evt.getKey();
+        
+        if (AppState.page == 0) {
+            if (key == WatchUi.KEY_UP || key == WatchUi.KEY_DOWN) {
+                if (key == WatchUi.KEY_UP) {
+                    AppState.selectedIndex = (AppState.selectedIndex - 1 + AppState.timeOptions.size()) % AppState.timeOptions.size();
+                } else {
+                    AppState.selectedIndex = (AppState.selectedIndex + 1) % AppState.timeOptions.size();
+                }
+                WatchUi.requestUpdate();
+                return true;
+            } else if (key == WatchUi.KEY_ENTER) {
+                // Enter key sends the selected time
+                var listener = new CommListener();
+                Communications.transmit(AppState.timeOptions[AppState.selectedIndex], null, listener);
+                return true;
             }
-            menu.addItem("None", :none);
-            menu.addItem("Crash if 'Hi'", :phoneFail);
-            delegate = new ListnerMenuDelegate();
+        } else if (key == WatchUi.KEY_ENTER || key == WatchUi.KEY_ESC) {
+            // Any key dismisses the message screen
+            AppState.page = 0;
+            AppState.showMessageTimeout = 0;
+            WatchUi.requestUpdate();
+            return true;
         }
-
-        WatchUi.pushView(menu, delegate, WatchUi.SLIDE_IMMEDIATE);
+        return false;
     }
 }
 
-class SendMenuDelegate extends WatchUi.MenuInputDelegate {
-    function initialize() {
-        WatchUi.MenuInputDelegate.initialize();
-    }
-
-    function onMenuItem(item) {
-        var listener = new CommListener();
-
-        if(item == :hello) {
-            Communications.transmit("Hello World.", null, listener);
-        } else if(item == :trap) {
-            Communications.transmit("IT'S A TRAP!", null, listener);
-        } else if(item == :ten) {
-            Communications.transmit("10", null, listener);
-        } else if(item == :five) {
-            Communications.transmit("5", null, listener);
-        } else if(item == :three) {
-            Communications.transmit("3", null, listener);
-        }
-        WatchUi.popView(WatchUi.SLIDE_IMMEDIATE);
-    }
-}
-
-class ListnerMenuDelegate extends WatchUi.MenuInputDelegate {
+// Menu delegate for listener registration
+class ListenerMenuDelegate extends WatchUi.MenuInputDelegate {
     function initialize() {
         WatchUi.MenuInputDelegate.initialize();
     }
@@ -114,13 +123,13 @@ class ListnerMenuDelegate extends WatchUi.MenuInputDelegate {
     function onMenuItem(item) {
         if(item == :phone) {
             if(Communications has :registerForPhoneAppMessages) {
-                Communications.registerForPhoneAppMessages(phoneMethod);
+                Communications.registerForPhoneAppMessages(AppState.phoneMethod);
             }
         } else if(item == :none) {
             Communications.registerForPhoneAppMessages(null);
         } else if(item == :phoneFail) {
-            crashOnMessage = true;
-            Communications.registerForPhoneAppMessages(phoneMethod);
+            AppState.crashOnMessage = true;
+            Communications.registerForPhoneAppMessages(AppState.phoneMethod);
         }
 
         WatchUi.popView(WatchUi.SLIDE_IMMEDIATE);

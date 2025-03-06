@@ -1,5 +1,6 @@
 <resources>
     <bitmaps>
         <bitmap id="id_monkey" filename="images/monkey.png" />
+        <bitmap id="CameraIcon" filename="images/camera.png" />
     </bitmaps>
 </resources>
