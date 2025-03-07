@@ -16,11 +16,59 @@ class CommListener extends Communications.ConnectionListener {
     }
 
     function onComplete() {
+        AppState.isTransmitting = false;
+        AppState.lastTransmitTime = System.getTimer();
+        AppState.lastMessage = "Sent: " + AppState.timeOptions[AppState.selectedIndex];
+        AppState.page = 1;
+        AppState.showMessageTimeout = System.getTimer() + 3000; // Show for 3 seconds
+        WatchUi.requestUpdate();
         System.println("Transmit Complete");
     }
 
     function onError() {
+        AppState.isTransmitting = false;
+        AppState.lastMessage = "Send Failed!";
+        AppState.page = 1;
+        AppState.showMessageTimeout = System.getTimer() + 3000;
+        WatchUi.requestUpdate();
         System.println("Transmit Failed");
+    }
+}
+
+// Helper function to check if we can transmit
+function canTransmit() {
+    if (AppState.isTransmitting) {
+        AppState.lastMessage = "Already sending...";
+        AppState.page = 1;
+        AppState.showMessageTimeout = System.getTimer() + 1500;
+        WatchUi.requestUpdate();
+        return false;
+    }
+    
+    var currentTime = System.getTimer();
+    if (currentTime - AppState.lastTransmitTime < AppState.TRANSMIT_COOLDOWN) {
+        AppState.lastMessage = "Please wait...";
+        AppState.page = 1;
+        AppState.showMessageTimeout = System.getTimer() + 1500;
+        WatchUi.requestUpdate();
+        return false;
+    }
+    
+    return true;
+}
+
+// Function to safely transmit data
+function safeTransmit(isTest) {
+    if (!canTransmit()) {
+        return;
+    }
+    
+    AppState.isTransmitting = true;
+    var listener = new CommListener();
+    if (isTest) {
+        Communications.transmit("TEST", null, listener);
+    } else {
+        Communications.transmit(AppState.timeOptions[AppState.selectedIndex], null, listener);
     }
 }
 
@@ -32,8 +80,7 @@ class CommInputDelegate extends WatchUi.BehaviorDelegate {
 
     function onMenu() {
         // Send time immediately rather than showing menu
-        var listener = new CommListener();
-        Communications.transmit(AppState.timeOptions[AppState.selectedIndex], null, listener);
+        safeTransmit(false);
         return true;
     }
 
@@ -62,8 +109,7 @@ class CommInputDelegate extends WatchUi.BehaviorDelegate {
             // Check if tap is on the camera icon area
             if (isInCircle(coords[0], coords[1], iconX, iconY, iconRadius)) {
                 // Camera icon tapped - send the selected time
-                var listener = new CommListener();
-                Communications.transmit(AppState.timeOptions[AppState.selectedIndex], null, listener);
+                safeTransmit(false);
             } else {
                 // Otherwise, cycle through time options
                 AppState.selectedIndex = (AppState.selectedIndex + 1) % AppState.timeOptions.size();
@@ -89,18 +135,16 @@ class CommInputDelegate extends WatchUi.BehaviorDelegate {
         var key = evt.getKey();
         
         if (AppState.page == 0) {
-            if (key == WatchUi.KEY_UP || key == WatchUi.KEY_DOWN) {
-                if (key == WatchUi.KEY_UP) {
-                    AppState.selectedIndex = (AppState.selectedIndex - 1 + AppState.timeOptions.size()) % AppState.timeOptions.size();
-                } else {
-                    AppState.selectedIndex = (AppState.selectedIndex + 1) % AppState.timeOptions.size();
-                }
+            if (key == WatchUi.KEY_UP) {
+               AppState.selectedIndex = (AppState.selectedIndex - 1 + AppState.timeOptions.size()) % AppState.timeOptions.size();
+               WatchUi.requestUpdate();
+               return true;
+            } else if (key == WatchUi.KEY_DOWN) {
+                AppState.selectedIndex = (AppState.selectedIndex + 1) % AppState.timeOptions.size();
                 WatchUi.requestUpdate();
                 return true;
             } else if (key == WatchUi.KEY_ENTER) {
-                // Enter key sends the selected time
-                var listener = new CommListener();
-                Communications.transmit(AppState.timeOptions[AppState.selectedIndex], null, listener);
+                safeTransmit(false);
                 return true;
             }
         } else if (key == WatchUi.KEY_ENTER || key == WatchUi.KEY_ESC) {

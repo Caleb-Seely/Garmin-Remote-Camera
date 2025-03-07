@@ -18,12 +18,19 @@ class AppState {
     static var strings = ["","","","",""];
     static var stringsSize = 5;
     static var selectedIndex = 0;
-    static var timeOptions = ["0", "5", "10"];
+    static var timeOptions = ["0", "30", "10", "5", "3"];
     static var crashOnMessage = false;
     static var hasDirectMessagingSupport = true;
     static var phoneMethod = null;
     static var showMessageTimeout = 0;
     static const MESSAGE_DISPLAY_TIME = 3; // seconds to show message
+    
+    // New state tracking variables
+    static var lastTransmitTime = 0;
+    static var isTransmitting = false;
+    static var upButtonPressTime = 0;
+    static var UP_BUTTON_HOLD_THRESHOLD = 1000; // 1 second hold threshold
+    static var TRANSMIT_COOLDOWN = 2000; // 2 second cooldown between transmits
 }
 
 class CommExample extends Application.AppBase {

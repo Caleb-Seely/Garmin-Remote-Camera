@@ -13,6 +13,7 @@ using Toybox.Timer;
 class CommView extends WatchUi.View {
     var screenShape;
     var cameraIcon;
+    var stopwatchIcon;
     var timer;
 
     function initialize() {
@@ -23,9 +24,10 @@ class CommView extends WatchUi.View {
     function onLayout(dc) {
         screenShape = System.getDeviceSettings().screenShape;
         
-        // Load camera icon bitmap
-        // Note: You'll need to add a camera icon resource to your project
+        // Load camera and stopwatch icon bitmaps
+        // Note: You'll need to add these icon resources to your project
         cameraIcon = WatchUi.loadResource(Rez.Drawables.CameraIcon);
+        stopwatchIcon = WatchUi.loadResource(Rez.Drawables.StopwatchIcon);
         
         // Start the timer to check for message timeout
         timer.start(method(:onTimer), 1000, true);
@@ -43,68 +45,65 @@ class CommView extends WatchUi.View {
     }
 
     function drawSimpleUI(dc) {
-        var centerX = dc.getWidth() / 2;
-        var centerY = dc.getHeight() / 2;
-        var radius;
+        var width = dc.getWidth();
+        var height = dc.getHeight();
+        var centerX = width / 2;
+        var centerY = height / 2;
+        var minDimension = width < height ? width : height;
+        var radius = minDimension * 0.4;
         
-        // Determine circle size based on screen dimensions
-        if (dc.getWidth() < dc.getHeight()) {
-            radius = dc.getWidth() * 0.4;
+        // Draw the stopwatch icon instead of "Delay" text
+        if (stopwatchIcon != null) {
+            var iconWidth = stopwatchIcon.getWidth();
+            var iconHeight = stopwatchIcon.getHeight();
+            dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
+            dc.drawBitmap(centerX - (iconWidth / 2), centerY - (radius / 2) - (iconHeight / 2), stopwatchIcon);
         } else {
-            radius = dc.getHeight() * 0.4;
+            // Fallback if icon isn't available - draw "TIMER" text
+            dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
+            dc.drawText(centerX, centerY - (radius / 2), Graphics.FONT_MEDIUM, "DELAY", Graphics.TEXT_JUSTIFY_CENTER);
         }
-        
-        // Draw yellow background circle
-      //   dc.setColor(Graphics.COLOR_YELLOW, Graphics.COLOR_TRANSPARENT);
-      //   dc.fillCircle(centerX, centerY, radius);
-        
-        // Draw the "Delay" label at top of circle
-        dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
-        dc.drawText(centerX, centerY - (radius / 2), Graphics.FONT_MEDIUM, "Delay", Graphics.TEXT_JUSTIFY_CENTER);
         
         // Draw the selected time value in large font
-        dc.drawText(centerX, centerY + (radius / 4), Graphics.FONT_LARGE, AppState.timeOptions[AppState.selectedIndex], Graphics.TEXT_JUSTIFY_CENTER);
+        dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
+        dc.drawText(centerX, centerY, Graphics.FONT_LARGE, AppState.timeOptions[AppState.selectedIndex], Graphics.TEXT_JUSTIFY_CENTER);
         
-        // Draw camera icon in top-right of circle
-        var iconX = centerX + (radius * 0.6);
-        var iconY = centerY - (radius * 0.6);
-        
-        if (cameraIcon != null) {
-            dc.drawBitmap(iconX - (cameraIcon.getWidth() / 2), iconY - (cameraIcon.getHeight() / 2), cameraIcon);
-        } else {
-            // Fallback if icon isn't available - draw a small camera-like shape
-            dc.setColor(Graphics.COLOR_DK_GRAY, Graphics.COLOR_TRANSPARENT);
-            dc.fillRectangle(iconX - 10, iconY - 7, 20, 14);
-            dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
-            dc.fillCircle(iconX, iconY, 5);
-        }
+
     }
 
     function drawMessage(dc) {
-        var centerX = dc.getWidth() / 2;
-        var centerY = dc.getHeight() / 2;
+        var width = dc.getWidth();
+        var height = dc.getHeight();
+        var messageBoxWidth = width * 0.8;
+        var messageBoxHeight = height * 0.3;
         
-        // Draw a dark overlay with 80% opacity
-        dc.setColor(Graphics.COLOR_BLACK, Graphics.COLOR_BLACK);
-        dc.fillRectangle(0, 0, dc.getWidth(), dc.getHeight());
+        // Position the message box at the bottom of the screen
+        var messageBoxX = width / 2 - messageBoxWidth / 2;
+        var messageBoxY = height - messageBoxHeight - (height * 0.1); // Leave some margin from bottom
+        
+      //   // Draw a dark overlay with 80% opacity
+      //   dc.setColor(Graphics.COLOR_BLACK, Graphics.COLOR_BLACK);
+      //   dc.fillRectangle(0, 0, width, height);
         
         // Draw message box
-        dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
-        dc.fillRoundedRectangle(centerX - (dc.getWidth() * 0.4), centerY - (dc.getHeight() * 0.2), 
-                              dc.getWidth() * 0.8, dc.getHeight() * 0.4, 10);
+      //   dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
+      //   dc.fillRoundedRectangle(messageBoxX, messageBoxY, messageBoxWidth, messageBoxHeight, 10);
+        
+        // Calculate text positions relative to the message box
+        var messageBoxCenterX = messageBoxX + messageBoxWidth / 2;
+        var titleY = messageBoxY + messageBoxHeight * 0.2;
+        var messageY = messageBoxY + messageBoxHeight * 0.5;
+        var instructionY = messageBoxY + messageBoxHeight * 0.8;
         
         // Draw title
-        dc.setColor(Graphics.COLOR_BLACK, Graphics.COLOR_TRANSPARENT);
-        dc.drawText(centerX, centerY - (dc.getHeight() * 0.1), 
-                   Graphics.FONT_SMALL, "Message Received", Graphics.TEXT_JUSTIFY_CENTER);
+        dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
+      //   dc.drawText(messageBoxCenterX, titleY, 
+      //              Graphics.FONT_SMALL, "Message Received", Graphics.TEXT_JUSTIFY_CENTER);
         
         // Draw the message
-        dc.drawText(centerX, centerY, Graphics.FONT_MEDIUM, 
+        dc.drawText(messageBoxCenterX, messageY, Graphics.FONT_MEDIUM, 
                    AppState.lastMessage, Graphics.TEXT_JUSTIFY_CENTER);
         
-        // Draw tap instruction
-        dc.drawText(centerX, centerY + (dc.getHeight() * 0.15), 
-                   Graphics.FONT_TINY, "Tap to dismiss", Graphics.TEXT_JUSTIFY_CENTER);
     }
 
     function onUpdate(dc) {
