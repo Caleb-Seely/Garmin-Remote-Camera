@@ -119,11 +119,11 @@ class CommView extends WatchUi.View {
                 drawSimpleUI(dc);
                 // Then overlay the message
                 drawMessage(dc);
-            }
-        } else {
+             }
+         } else {
             dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
             dc.drawText(dc.getWidth() / 2, dc.getHeight() / 3, Graphics.FONT_MEDIUM, 
                 "Direct Messaging API\nNot Supported", Graphics.TEXT_JUSTIFY_CENTER);
-        }
+         }
     }
 }

@@ -28,7 +28,7 @@ import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.LifecycleRegistry
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
-import com.garmin.android.apps.connectiq.sample.comm.MessageFactory
+//import com.garmin.android.apps.connectiq.sample.comm.MessageFactory
 import com.garmin.android.apps.connectiq.sample.comm.R
 import com.garmin.android.apps.connectiq.sample.comm.adapter.MessagesAdapter
 import com.garmin.android.connectiq.ConnectIQ
@@ -240,24 +240,24 @@ class DeviceActivity : Activity(), LifecycleOwner {
         }
     }
 
-    private fun openStore() {
-        Toast.makeText(this, "Opening ConnectIQ Store...", Toast.LENGTH_SHORT).show()
-
-        // Send a message to open the store
-        try {
-            if (STORE_APP_ID.isBlank()) {
-                AlertDialog.Builder(this@DeviceActivity)
-                    .setTitle(R.string.missing_store_id)
-                    .setMessage(R.string.missing_store_id_message)
-                    .setPositiveButton(android.R.string.ok, null)
-                    .create()
-                    .show()
-            } else {
-                connectIQ.openStore(STORE_APP_ID)
-            }
-        } catch (_: Exception) {
-        }
-    }
+//    private fun openStore() {
+//        Toast.makeText(this, "Opening ConnectIQ Store...", Toast.LENGTH_SHORT).show()
+//
+//        // Send a message to open the store
+//        try {
+//            if (STORE_APP_ID.isBlank()) {
+//                AlertDialog.Builder(this@DeviceActivity)
+//                    .setTitle(R.string.missing_store_id)
+//                    .setMessage(R.string.missing_store_id_message)
+//                    .setPositiveButton(android.R.string.ok, null)
+//                    .create()
+//                    .show()
+//            } else {
+//                connectIQ.openStore(STORE_APP_ID)
+//            }
+//        } catch (_: Exception) {
+//        }
+//    }
 
     private fun startCountdown(seconds: Int) {
         cameraManager.takePhoto(seconds)
