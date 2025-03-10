@@ -99,7 +99,7 @@ class CommView extends WatchUi.View {
         dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
       //   dc.drawText(messageBoxCenterX, titleY, 
       //              Graphics.FONT_SMALL, "Message Received", Graphics.TEXT_JUSTIFY_CENTER);
-        
+        //gotta work weekends commit lmao
         // Draw the message
         dc.drawText(messageBoxCenterX, messageY, Graphics.FONT_MEDIUM, 
                    AppState.lastMessage, Graphics.TEXT_JUSTIFY_CENTER);
