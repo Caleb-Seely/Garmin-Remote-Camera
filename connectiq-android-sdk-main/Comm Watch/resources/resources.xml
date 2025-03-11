@@ -1,6 +1,5 @@
 <resources>
     <bitmaps>
-        <bitmap id="id_monkey" filename="images/monkey.png" />
         <bitmap id="CameraIcon" filename="images/camera.png" />
         <bitmap id="StopwatchIcon" filename="images/time.png" />
         

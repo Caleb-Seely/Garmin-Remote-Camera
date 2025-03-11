@@ -44,32 +44,50 @@ class CommView extends WatchUi.View {
         }
     }
 
-    function drawSimpleUI(dc) {
-        var width = dc.getWidth();
-        var height = dc.getHeight();
-        var centerX = width / 2;
-        var centerY = height / 2;
-        var minDimension = width < height ? width : height;
-        var radius = minDimension * 0.4;
+function drawSimpleUI(dc) {
+    var width = dc.getWidth();
+    var height = dc.getHeight();
+    var centerX = width / 2;
+    var paddingX = width * 0.1;
+    var paddingY = width * 0.2;
+    // Group the stopwatch and time in the center of the screen
+    var stopwatchIconY = height * 0.60;  // Position stopwatch near the middle
+    var timeTextY = height * 0.75;       // Position time text below stopwatch
+    
+    // Draw the camera icon in the top right corner
+    if (cameraIcon != null) {
+        var iconWidth = cameraIcon.getWidth();
+        var iconHeight = cameraIcon.getHeight();
         
-        // Draw the stopwatch icon instead of "Delay" text
-        if (stopwatchIcon != null) {
-            var iconWidth = stopwatchIcon.getWidth();
-            var iconHeight = stopwatchIcon.getHeight();
-            dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
-            dc.drawBitmap(centerX - (iconWidth / 2), centerY - (radius / 2) - (iconHeight / 2), stopwatchIcon);
-        } else {
-            // Fallback if icon isn't available - draw "TIMER" text
-            dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
-            dc.drawText(centerX, centerY - (radius / 2), Graphics.FONT_MEDIUM, "DELAY", Graphics.TEXT_JUSTIFY_CENTER);
-        }
+        // Add padding from the edges
         
-        // Draw the selected time value in large font
+        var cameraIconX = width - paddingX - (iconWidth / 2);
+        var cameraIconY = paddingY + (iconHeight / 2);
+        
         dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
-        dc.drawText(centerX, centerY, Graphics.FONT_LARGE, AppState.timeOptions[AppState.selectedIndex], Graphics.TEXT_JUSTIFY_CENTER);
-        
-
+        dc.drawBitmap(cameraIconX - (iconWidth / 2), cameraIconY - (iconHeight / 2), cameraIcon);
+    } else {
+        // Fallback if icon isn't available
+        dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
+        dc.drawText(width - paddingX, paddingX, Graphics.FONT_MEDIUM, "CAMERA", Graphics.TEXT_JUSTIFY_RIGHT);
     }
+    
+    // Draw the stopwatch icon in the center
+    if (stopwatchIcon != null) {
+        var iconWidth = stopwatchIcon.getWidth();
+        var iconHeight = stopwatchIcon.getHeight();
+        dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
+        dc.drawBitmap(centerX - (iconWidth / 2), stopwatchIconY - (iconHeight / 2), stopwatchIcon);
+    } else {
+        // Fallback if icon isn't available
+        dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
+        dc.drawText(centerX, stopwatchIconY, Graphics.FONT_MEDIUM, "TIMER", Graphics.TEXT_JUSTIFY_CENTER);
+    }
+    
+    // Draw the selected time value directly below the stopwatch
+    dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
+    dc.drawText(centerX, timeTextY, Graphics.FONT_LARGE, AppState.timeOptions[AppState.selectedIndex], Graphics.TEXT_JUSTIFY_CENTER);
+}
 
     function drawMessage(dc) {
         var width = dc.getWidth();
@@ -82,12 +100,12 @@ class CommView extends WatchUi.View {
         var messageBoxY = height - messageBoxHeight - (height * 0.1); // Leave some margin from bottom
         
       //   // Draw a dark overlay with 80% opacity
-      //   dc.setColor(Graphics.COLOR_BLACK, Graphics.COLOR_BLACK);
-      //   dc.fillRectangle(0, 0, width, height);
+        dc.setColor(Graphics.COLOR_BLACK, Graphics.COLOR_BLACK);
+        dc.fillRectangle(0, 0, width, height);
         
         // Draw message box
-      //   dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
-      //   dc.fillRoundedRectangle(messageBoxX, messageBoxY, messageBoxWidth, messageBoxHeight, 10);
+        dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
+        dc.fillRoundedRectangle(messageBoxX, messageBoxY, messageBoxWidth, messageBoxHeight, 10);
         
         // Calculate text positions relative to the message box
         var messageBoxCenterX = messageBoxX + messageBoxWidth / 2;

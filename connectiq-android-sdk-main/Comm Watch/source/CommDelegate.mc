@@ -1,8 +1,4 @@
-// File: CommListeners.mc
-//
-// Copyright 2016 by Garmin Ltd. or its subsidiaries.
-// Subject to Garmin SDK License Agreement and Wearables
-// Application Developer Agreement.
+// File: CommDelegate.mc
 //
 
 using Toybox.WatchUi;
@@ -18,7 +14,7 @@ class CommListener extends Communications.ConnectionListener {
     function onComplete() {
         AppState.isTransmitting = false;
         AppState.lastTransmitTime = System.getTimer();
-        AppState.lastMessage = "Sent: " + AppState.timeOptions[AppState.selectedIndex];
+        AppState.lastMessage = "Sending ";
         AppState.page = 1;
         AppState.showMessageTimeout = System.getTimer() + 3000; // Show for 3 seconds
         WatchUi.requestUpdate();
