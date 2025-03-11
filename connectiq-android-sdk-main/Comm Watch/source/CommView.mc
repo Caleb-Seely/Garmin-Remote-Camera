@@ -89,40 +89,32 @@ function drawSimpleUI(dc) {
     dc.drawText(centerX, timeTextY, Graphics.FONT_LARGE, AppState.timeOptions[AppState.selectedIndex], Graphics.TEXT_JUSTIFY_CENTER);
 }
 
-    function drawMessage(dc) {
-        var width = dc.getWidth();
-        var height = dc.getHeight();
-        var messageBoxWidth = width * 0.8;
-        var messageBoxHeight = height * 0.3;
-        
-        // Position the message box at the bottom of the screen
-        var messageBoxX = width / 2 - messageBoxWidth / 2;
-        var messageBoxY = height - messageBoxHeight - (height * 0.1); // Leave some margin from bottom
-        
-      //   // Draw a dark overlay with 80% opacity
-        dc.setColor(Graphics.COLOR_BLACK, Graphics.COLOR_BLACK);
-        dc.fillRectangle(0, 0, width, height);
-        
-        // Draw message box
-        dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
-        dc.fillRoundedRectangle(messageBoxX, messageBoxY, messageBoxWidth, messageBoxHeight, 10);
-        
-        // Calculate text positions relative to the message box
-        var messageBoxCenterX = messageBoxX + messageBoxWidth / 2;
-        var titleY = messageBoxY + messageBoxHeight * 0.2;
-        var messageY = messageBoxY + messageBoxHeight * 0.5;
-        var instructionY = messageBoxY + messageBoxHeight * 0.8;
-        
-        // Draw title
-        dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
-      //   dc.drawText(messageBoxCenterX, titleY, 
-      //              Graphics.FONT_SMALL, "Message Received", Graphics.TEXT_JUSTIFY_CENTER);
-        //gotta work weekends commit lmao
-        // Draw the message
-        dc.drawText(messageBoxCenterX, messageY, Graphics.FONT_MEDIUM, 
-                   AppState.lastMessage, Graphics.TEXT_JUSTIFY_CENTER);
-        
-    }
+function drawMessage(dc) {
+    var width = dc.getWidth();
+    var height = dc.getHeight();
+    
+    // Make the entire screen black
+    dc.setColor(Graphics.COLOR_BLACK, Graphics.COLOR_BLACK);
+    dc.fillRectangle(0, 0, width, height);
+    
+    // Set text color to white
+    dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
+    
+    // Get font height for proper vertical centering
+    var font = Graphics.FONT_MEDIUM;
+    var fontHeight = dc.getFontHeight(font);
+    
+    // Calculate center positions
+    var centerX = width / 2;
+    // Adjust vertical position to account for baseline alignment
+    var centerY = height / 2 - (fontHeight / 2);
+    
+    // Draw the message in the center of the screen
+    dc.drawText(centerX, centerY, 
+                font, 
+                AppState.lastMessage, 
+                Graphics.TEXT_JUSTIFY_CENTER);
+}
 
     function onUpdate(dc) {
         // Clear the screen
