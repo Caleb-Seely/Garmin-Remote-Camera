@@ -1,9 +1,4 @@
 // File: CommView.mc
-//
-// Copyright 2016 by Garmin Ltd. or its subsidiaries.
-// Subject to Garmin SDK License Agreement and Wearables
-// Application Developer Agreement.
-//
 
 using Toybox.WatchUi;
 using Toybox.Graphics;
