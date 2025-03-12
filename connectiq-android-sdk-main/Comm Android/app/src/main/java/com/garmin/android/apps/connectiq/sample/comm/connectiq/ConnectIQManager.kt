@@ -45,24 +45,39 @@ class ConnectIQManager(
     fun registerForAppEvents() {
         try {
             connectIQ.registerForAppEvents(device, myApp) { _, _, message, _ ->
-                // Parse the message to get delay (if any)
+                // Variable to hold the delay seconds
                 var delaySeconds = 0
-                if (message.isNotEmpty()) {
-                    try {
-                        delaySeconds = message[0].toString().toIntOrNull() ?: 0
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Error parsing delay from message", e)
+
+                // Message is likely a List<Any>, so we need to extract the content
+                if (message != null && message.isNotEmpty()) {
+                    val firstItem = message[0]
+
+                    when (firstItem) {
+                        is String -> {
+                            if (firstItem.equals("cancel", ignoreCase = true)) {
+                                delaySeconds = -1  // Set to -1 to indicate cancellation
+                            } else {
+                                // Try to parse as a number for countdown
+                                delaySeconds = firstItem.toIntOrNull() ?: 0
+                            }
+                        }
+                        is Number -> {
+                            delaySeconds = firstItem.toInt()
+                        }
+                        // Add handling for other message types if needed
                     }
                 }
 
+                // Update the status text
                 statusTextView.post {
-                    statusTextView.text = if (delaySeconds > 0) {
-                        "Starting countdown: $delaySeconds seconds"
-                    } else {
-                        "Taking photo..."
+                    statusTextView.text = when {
+                        delaySeconds > 0 -> "Starting countdown: $delaySeconds seconds"
+                        delaySeconds == -1 -> "Cancelled photo request"
+                        else -> "Taking photo..."
                     }
                 }
 
+                // Call onPhotoRequest with the calculated delay
                 onPhotoRequest(delaySeconds)
             }
         } catch (e: InvalidStateException) {

@@ -35,7 +35,8 @@ class MyCameraManager(
     private val lifecycleOwner: LifecycleOwner,
     private val viewFinder: PreviewView,
     private val onPhotoTaken: (String) -> Unit = {},
-    private val onCountdownUpdate: ((Int) -> Unit)? = null
+    private val onCountdownUpdate: ((Int) -> Unit)? = null,
+    private val onCameraSwapEnabled: ((Boolean) -> Unit)? = null
 ) {
     companion object {
         private const val TAG = "MyCameraManager"
@@ -52,6 +53,8 @@ class MyCameraManager(
     private var photoCount = 0
     private var isFrontCamera = false
     private lateinit var countdownText: TextView
+    private var currentCountdown = 0
+    private var isCountdownActive = false
 
     init {
         cameraExecutor = Executors.newSingleThreadExecutor()
@@ -105,6 +108,11 @@ class MyCameraManager(
                 isCameraInitialized = true
                 isCameraActive = true
                 Log.d(TAG, "Camera initialized and active")
+
+                // Update countdown display after successful camera switch
+                if (isCountdownActive) {
+                    updateCountdownDisplay(currentCountdown)
+                }
             } catch (exc: Exception) {
                 handleCameraBindingError(exc, cameraProvider)
             }
@@ -135,6 +143,21 @@ class MyCameraManager(
         }
     }
 
+    fun cancelPhoto() {
+        isCountdownActive = false
+        currentCountdown = 0
+        updateCountdownDisplay(0)
+        // Re-enable camera swap button
+        onCameraSwapEnabled?.invoke(true)
+        // Turn off flash if it was on
+        try {
+            camera?.cameraControl?.enableTorch(false)
+            isFlashEnabled = false
+        } catch (e: Exception) {
+            Log.e(TAG, "Error turning off flash during cancel", e)
+        }
+    }
+
     fun takePhoto(delaySeconds: Int = 0) {
         if (!isCameraInitialized || !isCameraActive) {
             Log.e(TAG, "Camera not initialized or not active")
@@ -149,14 +172,23 @@ class MyCameraManager(
             return
         }
 
+        // Cancel any existing countdown before starting a new one
+        if (isCountdownActive) {
+            cancelPhoto()
+        }
+
         if (delaySeconds > 0) {
+            isCountdownActive = true
+            currentCountdown = delaySeconds
+            // Disable camera swap button at start of countdown
+            onCameraSwapEnabled?.invoke(false)
+            
             scope.launch {
                 var remainingSeconds = delaySeconds
-                while (remainingSeconds > 0) {
-                    // Update countdown display if using front camera
-                    if (isFrontCamera) {
-                        onCountdownUpdate?.invoke(remainingSeconds)
-                    }
+                while (remainingSeconds > 0 && isCountdownActive) {
+                    // Update countdown display based on current camera
+                    updateCountdownDisplay(remainingSeconds)
+                    
                     if (remainingSeconds > 1) {
                         // Regular countdown flash
                         toggleFlash("normal", 0.2f)
@@ -167,14 +199,29 @@ class MyCameraManager(
                     remainingSeconds--
                     delay(1000) // Wait 1 second between countdown steps
                 }
-                // Clear countdown display
-                if (isFrontCamera) {
-                    onCountdownUpdate?.invoke(0)
+                
+                // Only take photo if countdown wasn't cancelled
+                if (isCountdownActive) {
+                    // Clear countdown display
+                    updateCountdownDisplay(0)
+                    capturePhoto(imageCapture)
                 }
-                capturePhoto(imageCapture)
+                isCountdownActive = false
+                currentCountdown = 0
+                // Re-enable camera swap button after countdown/photo
+                onCameraSwapEnabled?.invoke(true)
             }
         } else {
             capturePhoto(imageCapture)
+        }
+    }
+
+    private fun updateCountdownDisplay(seconds: Int) {
+        if (isFrontCamera) {
+            onCountdownUpdate?.invoke(seconds)
+        } else {
+            // Always clear the countdown when using back camera
+            onCountdownUpdate?.invoke(0)
         }
     }
 
@@ -276,6 +323,11 @@ class MyCameraManager(
             CameraSelector.DEFAULT_BACK_CAMERA
         }
 
+        // Update countdown display based on new camera state
+        if (isCountdownActive) {
+            updateCountdownDisplay(currentCountdown)
+        }
+
         val cameraProviderFuture = ProcessCameraProvider.getInstance(context)
         cameraProviderFuture.addListener({
             try {
@@ -284,11 +336,28 @@ class MyCameraManager(
             } catch (exc: Exception) {
                 Log.e(TAG, "Failed to flip camera", exc)
                 Toast.makeText(context, "Failed to switch camera: ${exc.message}", Toast.LENGTH_SHORT).show()
+                // Try to recover by reverting to previous camera
+                isFrontCamera = !isFrontCamera
+                currentCameraSelector = if (isFrontCamera) {
+                    CameraSelector.DEFAULT_FRONT_CAMERA
+                } else {
+                    CameraSelector.DEFAULT_BACK_CAMERA
+                }
+                try {
+                    bindCamera(cameraProviderFuture.get())
+                } catch (e: Exception) {
+                    Log.e(TAG, "Camera recovery failed", e)
+                }
             }
         }, ContextCompat.getMainExecutor(context))
     }
 
     fun shutdown() {
+        isCountdownActive = false
+        currentCountdown = 0
+        updateCountdownDisplay(0)
+        // Make sure camera swap button is enabled when shutting down
+        onCameraSwapEnabled?.invoke(true)
         cameraExecutor.shutdown()
         try {
             if (!cameraExecutor.awaitTermination(1000, TimeUnit.MILLISECONDS)) {

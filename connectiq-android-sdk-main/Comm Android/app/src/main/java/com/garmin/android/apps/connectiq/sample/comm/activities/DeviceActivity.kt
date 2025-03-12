@@ -92,6 +92,7 @@ class DeviceActivity : Activity(), LifecycleOwner {
     private var openAppButtonView: TextView? = null
     private lateinit var statusTextView: TextView
     private lateinit var countdownTextView: TextView
+    private lateinit var cameraFlipButton: View
 
     private val connectIQ: ConnectIQ = ConnectIQ.getInstance()
     private lateinit var device: IQDevice
@@ -149,6 +150,7 @@ class DeviceActivity : Activity(), LifecycleOwner {
             countdownTextView = findViewById(R.id.countdown_text)  //Front cam timer
             openAppButtonView = findViewById(R.id.openapp)
             viewFinder = findViewById(R.id.viewFinder)
+            cameraFlipButton = findViewById(R.id.camera_flip_button)
 
             // Initialize managers
             cameraManager = MyCameraManager(
@@ -164,11 +166,18 @@ class DeviceActivity : Activity(), LifecycleOwner {
                         countdownTextView.text = if (seconds > 0) seconds.toString() else ""
                         countdownTextView.visibility = if (seconds > 0) View.VISIBLE else View.GONE
                     }
+                },
+                onCameraSwapEnabled = { enabled ->
+                    cameraFlipButton.visibility = if (enabled) View.VISIBLE else View.GONE
                 }
             )
 
             connectIQManager = ConnectIQManager(this, device, statusTextView) { delaySeconds ->
-                if (delaySeconds > 0) {
+                if (delaySeconds == -1) {
+                    // Cancel request received
+                    cameraManager.cancelPhoto()
+                    statusTextView.text = "Photo cancelled"
+                } else if (delaySeconds > 0) {
                     startCountdown(delaySeconds)
                 } else {
                     cameraManager.takePhoto()
