@@ -6,6 +6,8 @@ using Toybox.Communications;
 
 // Communication listener for transmit operations
 class CommListener extends Communications.ConnectionListener {
+    var wasCancelled = false;
+
     function initialize() {
         Communications.ConnectionListener.initialize();
         System.println("CommListener Init");
@@ -14,15 +16,35 @@ class CommListener extends Communications.ConnectionListener {
     function onComplete() {
         AppState.isTransmitting = false;
         AppState.lastTransmitTime = System.getTimer();
-        AppState.lastMessage = "Sending ";
+        
+        // Handle cancel case
+        if (wasCancelled) {
+            AppState.isCountdownActive = false;
+            AppState.lastMessage = "Cancelled";
+            AppState.page = 1;
+            AppState.showMessageTimeout = System.getTimer() + 2000;
+            WatchUi.requestUpdate();
+            System.println("Cancel Complete");
+            return;
+        }
+        
+        // Normal timer start case
+        var timeString = AppState.timeOptions[AppState.selectedIndex];
+        if (AppState.startCountdown(timeString)) {
+            AppState.lastMessage = "Hello";           //Countdown, will probably replace this with time immediatly 
+        } else {
+            AppState.lastMessage = "Sending...";      // No countdown
+        }
+        
         AppState.page = 1;
-        AppState.showMessageTimeout = System.getTimer() + 3000; // Show for 3 seconds
+        AppState.showMessageTimeout = System.getTimer() + 2000;
         WatchUi.requestUpdate();
         System.println("Transmit Complete");
     }
 
     function onError() {
         AppState.isTransmitting = false;
+        AppState.isCountdownActive = false;
         AppState.lastMessage = "Send Failed!";
         AppState.page = 1;
         AppState.showMessageTimeout = System.getTimer() + 3000;
@@ -31,45 +53,25 @@ class CommListener extends Communications.ConnectionListener {
     }
 }
 
-// Helper function to check if we can transmit
-function canTransmit() {
-    if (AppState.isTransmitting) {
-        AppState.lastMessage = "Already sending...";
-        AppState.page = 1;
-        AppState.showMessageTimeout = System.getTimer() + 1500;
-        WatchUi.requestUpdate();
-        return false;
-    }
-    
-    var currentTime = System.getTimer();
-    if (currentTime - AppState.lastTransmitTime < AppState.TRANSMIT_COOLDOWN) {
-        AppState.lastMessage = "Please wait...";
-        AppState.page = 1;
-        AppState.showMessageTimeout = System.getTimer() + 1500;
-        WatchUi.requestUpdate();
-        return false;
-    }
-    
-    return true;
-}
 
 // Function to safely transmit data
 function safeTransmit(isTest) {
-    if (!canTransmit()) {
-      System.println("Can't transmit at all");
-        return;
-    }
     
     AppState.isTransmitting = true;
     var listener = new CommListener();
-    if (isTest) {
-        Communications.transmit("TEST", null, listener);
-        System.println("Transmit isTest");
-    } else {
-      System.println("Transmit Normal");
-        Communications.transmit(AppState.timeOptions[AppState.selectedIndex], null, listener);
+    
+    // If countdown is active, send cancel message
+    if (AppState.isCountdownActive) {
+        listener.wasCancelled = true;
+        Communications.transmit("CANCEL", null, listener);
+        System.println("Cancelling countdown");
+        return;
     }
+    
+    System.println("Transmit Normal");
+    Communications.transmit(AppState.timeOptions[AppState.selectedIndex], null, listener);
 }
+
 
 // Main input delegate for the application
 class CommInputDelegate extends WatchUi.BehaviorDelegate {
@@ -174,28 +176,3 @@ class CommInputDelegate extends WatchUi.BehaviorDelegate {
     // }
 }
 
-// Menu delegate for listener registration
-// class ListenerMenuDelegate extends WatchUi.MenuInputDelegate {
-//     function initialize() {
-//         WatchUi.MenuInputDelegate.initialize();
-//         System.println("ListenerMenu Init");
-//     }
-
-//    //  function onMenuItem(item) {
-//    //      if(item == :phone) {
-//    //          if(Communications has :registerForPhoneAppMessages) {
-//    //              Communications.registerForPhoneAppMessages(AppState.phoneMethod);
-//    //              System.println("onMenuItem phone");
-//    //          }
-//    //      } else if(item == :none) {
-//    //          Communications.registerForPhoneAppMessages(null);
-//    //          System.println("Trled");
-//    //      } else if(item == :phoneFail) {
-//    //          AppState.crashOnMessage = true;
-//    //          System.println("Traaaa");
-//    //          Communications.registerForPhoneAppMessages(AppState.phoneMethod);
-//    //      }
-
-//    //      WatchUi.popView(WatchUi.SLIDE_IMMEDIATE);
-//    //  }
-// }

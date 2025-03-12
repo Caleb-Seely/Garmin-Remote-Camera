@@ -8,6 +8,7 @@ using Toybox.Attention;
 
 // Global state shared between files
 class AppState {
+    // Your existing properties
     static var page = 0;
     static var lastMessage = "";
     static var strings = ["","","","",""];
@@ -19,14 +20,68 @@ class AppState {
     static var phoneMethod = null;
     static var showMessageTimeout = 0;
     static const MESSAGE_DISPLAY_TIME = 3; // seconds to show message
-    
-    // New state tracking variables
     static var lastTransmitTime = 0;
     static var isTransmitting = false;
     static var upButtonPressTime = 0;
     static var UP_BUTTON_HOLD_THRESHOLD = 1000; // 1 second hold threshold
     static var TRANSMIT_COOLDOWN = 2000; // 2 second cooldown between transmits
+
+    // New properties for countdown timer
+    static var isCountdownActive = false;
+    static var countdownEndTime = 0;
+    static var countdownDuration = 0; // Duration in milliseconds
+    static var countdownStartTime = 0;
+    
+    // Start a countdown timer based on the selected time string (e.g. "10")
+    static function startCountdown(timeString) {
+        // Parse the time string (no units in your timeOptions)
+        var seconds = 0;
+        if (timeString != null && timeString.length() > 0) {
+            seconds = timeString.toNumber();
+        }
+        
+        if (seconds > 0) {
+            countdownDuration = seconds * 1000; // Convert to milliseconds
+            countdownStartTime = System.getTimer();
+            countdownEndTime = countdownStartTime + countdownDuration;
+            isCountdownActive = true;
+            
+            System.println("Starting countdown for " + seconds + " seconds");
+            return true;
+        }
+        
+        return false;
+    }
+    
+    // Get remaining time in seconds
+    static function getRemainingTime() {
+        if (!isCountdownActive) {
+            return 0;
+        }
+        
+        var currentTime = System.getTimer();
+        var remaining = (countdownEndTime - currentTime) / 1000.0; // Convert to seconds
+        
+        if (remaining <= 0) {
+            isCountdownActive = false;
+            return 0;
+        }
+        
+        return remaining;
+    }
+    
+    // Format remaining time as a string (e.g. "9")
+    static function getFormattedRemainingTime() {
+        var remaining = getRemainingTime();
+        if (remaining <= 0) {
+            return "0";
+        }
+        
+        // Round to nearest second and return as integer
+        return (remaining + 0.5).toNumber().toString();
+    }
 }
+
 
 class CommExample extends Application.AppBase {
     function initialize() {
