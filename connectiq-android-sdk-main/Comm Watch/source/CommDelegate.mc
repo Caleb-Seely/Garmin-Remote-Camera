@@ -55,7 +55,7 @@ class CommListener extends Communications.ConnectionListener {
 
 
 // Function to safely transmit data
-function safeTransmit(isTest) {
+function safeTransmit(video) {
     
     AppState.isTransmitting = true;
     var listener = new CommListener();
@@ -67,9 +67,16 @@ function safeTransmit(isTest) {
         System.println("Cancelling countdown");
         return;
     }
-    
-    System.println("Transmit Normal");
-    Communications.transmit(AppState.timeOptions[AppState.selectedIndex], null, listener);
+
+    if (video) {
+        // Send "VIDEO " + time option
+        System.println("Transmit Video: " + AppState.timeOptions[AppState.selectedIndex] );
+        Communications.transmit("VIDEO " + AppState.timeOptions[AppState.selectedIndex], null, listener);
+    } else {
+        // Original behavior for normal transmit
+        System.println("Transmit Normal");
+        Communications.transmit(AppState.timeOptions[AppState.selectedIndex], null, listener);
+    }
 }
 
 
@@ -168,11 +175,11 @@ class CommInputDelegate extends WatchUi.BehaviorDelegate {
     
     // Commented out but preserved from original code
     // Holding the up key triggers this
-    // function onMenu() {
-    //     // Send time immediately rather than showing menu
-    //     safeTransmit(false);
-    //     System.println("OnMenu transmit");
-    //     return true;
-    // }
+   function onMenu() {
+      // Call safeTransmit with "VIDEO" parameter
+      safeTransmit(true);
+      System.println("OnMenu transmit");
+      return true;
+   }
 }
 

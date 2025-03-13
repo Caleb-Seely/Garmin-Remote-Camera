@@ -149,13 +149,13 @@ class DeviceActivity : Activity(), LifecycleOwner {
         setContentView(R.layout.activity_device)
 
         try {
-        device = intent.getParcelableExtra<Parcelable>(EXTRA_IQ_DEVICE) as IQDevice
-        myApp = IQApp(COMM_WATCH_ID)
+            device = intent.getParcelableExtra<Parcelable>(EXTRA_IQ_DEVICE) as IQDevice
+            myApp = IQApp(COMM_WATCH_ID)
 
             // Initialize views
             statusTextView = findViewById(R.id.status_text)
             countdownTextView = findViewById(R.id.countdown_text)
-        openAppButtonView = findViewById(R.id.openapp)
+            openAppButtonView = findViewById(R.id.openapp)
             viewFinder = findViewById(R.id.viewFinder)
             cameraFlipButton = findViewById(R.id.camera_flip_button)
             flashToggleButton = findViewById(R.id.flash_toggle_button)
@@ -189,6 +189,12 @@ class DeviceActivity : Activity(), LifecycleOwner {
                     onRecordingStatusUpdate = { status ->
                         runOnUiThread {
                             statusTextView.text = status
+                            // Only send messages for significant state changes
+                            if (status == StatusMessages.RECORDING_STARTED || 
+                                status == StatusMessages.RECORDING_STOPPED || 
+                                status == StatusMessages.RECORDING_CANCELLED) {
+                                connectIQManager.sendMessage(status)
+                            }
                         }
                     }
                 )
@@ -200,7 +206,7 @@ class DeviceActivity : Activity(), LifecycleOwner {
                 flashToggleButton.alpha = if (cameraManager.isFrontCamera()) 0.5f else 1.0f
                 videoButton.setImageResource(R.drawable.ic_baseline_videocam_24)
                 captureButton.setImageResource(R.drawable.ic_baseline_camera_24)
-                updateStatusWithTimeout("Camera ready")
+                updateStatusWithTimeout(StatusMessages.CAMERA_READY)
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to initialize camera manager", e)
                 Toast.makeText(this, "Camera initialization failed: ${e.message}", Toast.LENGTH_LONG).show()
@@ -209,28 +215,57 @@ class DeviceActivity : Activity(), LifecycleOwner {
             }
 
             connectIQManager = ConnectIQManager(this, device, statusTextView) { delaySeconds ->
-                if (delaySeconds == -1) {
-                    // Cancel request received
-                    if (cameraManager.isRecording()) {
-                        cameraManager.stopVideoRecording()
-                    } else {
-                        cameraManager.cancelPhoto()
+                when {
+                    delaySeconds == -1 -> {
+                        // Cancel request received or stop recording
+                        if (cameraManager.isRecording()) {
+                            cameraManager.stopVideoRecording()
+                            statusTextView.text = StatusMessages.RECORDING_STOPPED
+                            countdownTextView.text = ""
+                            countdownTextView.visibility = View.GONE
+                        } else {
+                            cameraManager.cancelPhoto()
+                            statusTextView.text = StatusMessages.RECORDING_CANCELLED
+                        }
                     }
-                    statusTextView.text = "Operation cancelled"
-                } else if (delaySeconds > 0) {
-                    if (cameraManager.isVideoMode()) {
-                        startVideoCountdown(delaySeconds)
-                    } else {
+                    delaySeconds == -2 -> {
+                        // Immediate video command
+                        if (!cameraManager.isVideoMode()) {
+                            cameraManager.toggleVideoMode()
+                            updateModeIndicator(true)
+                            updateStatusWithTimeout(StatusMessages.VIDEO_MODE)
+                        }
+                        cameraManager.startVideoRecording()
+                    }
+                    delaySeconds < -2 -> {
+                        // Delayed video command (convert back to positive delay)
+                        val actualDelay = -(delaySeconds + 3)
+                        if (!cameraManager.isVideoMode()) {
+                            cameraManager.toggleVideoMode()
+                            updateModeIndicator(true)
+                        }
+                        startVideoCountdown(actualDelay)
+                    }
+                    delaySeconds > 0 -> {
+                        // Regular photo with delay
+                        if (cameraManager.isVideoMode()) {
+                            cameraManager.toggleVideoMode()
+                            updateModeIndicator(false)
+                        }
                         startCountdown(delaySeconds)
                     }
-                } else {
-                    if (cameraManager.isVideoMode()) {
-                        handleVideoButtonClick()
-                    } else {
+                    else -> {
+                        // Immediate photo
+                        if (cameraManager.isVideoMode()) {
+                            cameraManager.toggleVideoMode()
+                            updateModeIndicator(false)
+                        }
                         cameraManager.takePhoto()
                     }
                 }
             }
+
+
 
             setupClickListeners()
 
@@ -382,10 +417,38 @@ class DeviceActivity : Activity(), LifecycleOwner {
     }
 
     private fun startCountdown(seconds: Int) {
-        cameraManager.takePhoto(seconds)
+        // Clear any existing countdown
+        countdownRunnable?.let { handler.removeCallbacks(it) }
+        
+        // Update status text
+        statusTextView.text = "Starting countdown"
+        
+        // Start countdown
+        countdownSeconds = seconds
+        countdownTextView.visibility = View.VISIBLE
+        countdownTextView.text = seconds.toString()
+        
+        countdownRunnable = object : Runnable {
+            override fun run() {
+                if (countdownSeconds > 0) {
+                    countdownSeconds--
+                    countdownTextView.text = countdownSeconds.toString()
+                    handler.postDelayed(this, 1000)
+                } else {
+                    countdownTextView.visibility = View.GONE
+                    cameraManager.takePhoto()
+                }
+            }
+        }
+        handler.post(countdownRunnable!!)
     }
 
     private fun updateStatusWithTimeout(message: String, timeoutMs: Long = UIConstants.STATUS_MESSAGE_TIMEOUT) {
+        // Don't update status if we're showing a countdown
+        if (countdownTextView.visibility == View.VISIBLE) {
+            return
+        }
+        
         statusTextView.text = message
         handler.removeCallbacksAndMessages(null)
         handler.postDelayed({
@@ -412,7 +475,35 @@ class DeviceActivity : Activity(), LifecycleOwner {
     }
 
     private fun startVideoCountdown(seconds: Int) {
-        cameraManager.startVideoRecording(seconds)
+        // Clear any existing countdown
+        countdownRunnable?.let { handler.removeCallbacks(it) }
+        
+        // Update status text
+        statusTextView.text = "Starting video recording in $seconds seconds"
+        
+        // Start countdown
+        countdownSeconds = seconds
+        countdownTextView.visibility = View.VISIBLE
+        countdownTextView.text = seconds.toString()
+        
+        countdownRunnable = object : Runnable {
+            override fun run() {
+                if (countdownSeconds > 0) {
+                    countdownSeconds--
+                    countdownTextView.text = countdownSeconds.toString()
+                    handler.postDelayed(this, 1000)
+                } else {
+                    countdownTextView.visibility = View.GONE
+                    // Ensure we're in video mode before starting recording
+                    if (!cameraManager.isVideoMode()) {
+                        cameraManager.toggleVideoMode()
+                        updateModeIndicator(true)
+                    }
+                    cameraManager.startVideoRecording()
+                }
+            }
+        }
+        handler.post(countdownRunnable!!)
     }
 
     /**

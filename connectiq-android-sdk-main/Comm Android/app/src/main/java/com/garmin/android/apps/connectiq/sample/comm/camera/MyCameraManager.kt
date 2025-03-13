@@ -302,7 +302,7 @@ class MyCameraManager(
                 object : ImageCapture.OnImageSavedCallback {
                     override fun onImageSaved(output: ImageCapture.OutputFileResults) {
                         photoCount++
-                        val msg = "High quality photo captured successfully"
+                        val msg = "Photo captured successfully"
                         Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
                         Log.d(TAG, "Photo capture succeeded: ${output.savedUri}")
                         
@@ -313,7 +313,7 @@ class MyCameraManager(
                             context.contentResolver.update(uri, contentValues, null, null)
                         }
                         
-                        onPhotoTaken("Photos Captured: $photoCount")
+                        onPhotoTaken("Success!")
                     }
 
                     override fun onError(exc: ImageCaptureException) {
