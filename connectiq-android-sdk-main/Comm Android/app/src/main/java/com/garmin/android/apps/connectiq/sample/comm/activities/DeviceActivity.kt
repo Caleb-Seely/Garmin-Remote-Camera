@@ -114,13 +114,13 @@ class DeviceActivity : Activity(), LifecycleOwner {
     private val openAppListener = ConnectIQ.IQOpenApplicationListener { _, _, status ->
         runOnUiThread {
             Log.d(TAG, "App status changed: ${status.name}")
-            Toast.makeText(applicationContext, "App Status: " + status.name, Toast.LENGTH_SHORT).show()
+        Toast.makeText(applicationContext, "App Status: " + status.name, Toast.LENGTH_SHORT).show()
 
-            if (status == ConnectIQ.IQOpenApplicationStatus.APP_IS_ALREADY_RUNNING) {
-                appIsOpen = true
+        if (status == ConnectIQ.IQOpenApplicationStatus.APP_IS_ALREADY_RUNNING) {
+            appIsOpen = true
                 openAppButtonView?.setImageResource(R.drawable.ic_baseline_send_24)
-            } else {
-                appIsOpen = false
+        } else {
+            appIsOpen = false
                 openAppButtonView?.setImageResource(R.drawable.ic_baseline_send_24)
             }
         }
@@ -149,13 +149,13 @@ class DeviceActivity : Activity(), LifecycleOwner {
         setContentView(R.layout.activity_device)
 
         try {
-            device = intent.getParcelableExtra<Parcelable>(EXTRA_IQ_DEVICE) as IQDevice
-            myApp = IQApp(COMM_WATCH_ID)
+        device = intent.getParcelableExtra<Parcelable>(EXTRA_IQ_DEVICE) as IQDevice
+        myApp = IQApp(COMM_WATCH_ID)
 
             // Initialize views
             statusTextView = findViewById(R.id.status_text)
             countdownTextView = findViewById(R.id.countdown_text)
-            openAppButtonView = findViewById(R.id.openapp)
+        openAppButtonView = findViewById(R.id.openapp)
             viewFinder = findViewById(R.id.viewFinder)
             cameraFlipButton = findViewById(R.id.camera_flip_button)
             flashToggleButton = findViewById(R.id.flash_toggle_button)
@@ -185,6 +185,11 @@ class DeviceActivity : Activity(), LifecycleOwner {
                         runOnUiThread {
                             cameraFlipButton.visibility = if (enabled) View.VISIBLE else View.GONE
                         }
+                    },
+                    onRecordingStatusUpdate = { status ->
+                        runOnUiThread {
+                            statusTextView.text = status
+                        }
                     }
                 )
 
@@ -206,12 +211,24 @@ class DeviceActivity : Activity(), LifecycleOwner {
             connectIQManager = ConnectIQManager(this, device, statusTextView) { delaySeconds ->
                 if (delaySeconds == -1) {
                     // Cancel request received
-                    cameraManager.cancelPhoto()
-                    statusTextView.text = "Photo cancelled"
+                    if (cameraManager.isRecording()) {
+                        cameraManager.stopVideoRecording()
+                    } else {
+                        cameraManager.cancelPhoto()
+                    }
+                    statusTextView.text = "Operation cancelled"
                 } else if (delaySeconds > 0) {
-                    startCountdown(delaySeconds)
+                    if (cameraManager.isVideoMode()) {
+                        startVideoCountdown(delaySeconds)
+                    } else {
+                        startCountdown(delaySeconds)
+                    }
                 } else {
-                    cameraManager.takePhoto()
+                    if (cameraManager.isVideoMode()) {
+                        handleVideoButtonClick()
+                    } else {
+                        cameraManager.takePhoto()
+                    }
                 }
             }
 
@@ -232,7 +249,7 @@ class DeviceActivity : Activity(), LifecycleOwner {
                 )
             }
 
-            // Keep screen on for countdown
+            // Keep screen on for countdown and recording
             window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
         } catch (e: Exception) {
@@ -313,22 +330,30 @@ class DeviceActivity : Activity(), LifecycleOwner {
             }
         }
 
-        // Capture button
+        // Camera mode button
         captureButton.setOnClickListener {
-            if (!isVideoMode) {
+            if (cameraManager.isVideoMode()) {
+                // Switch to camera mode
+                cameraManager.toggleVideoMode()
+                updateModeIndicator(false)
+                updateStatusWithTimeout(StatusMessages.PHOTO_MODE)
+            } else {
+                // Take photo
                 cameraManager.takePhoto()
             }
         }
 
-        // Video mode toggle button
+        // Video mode button
         videoButton.setOnClickListener {
-            isVideoMode = !isVideoMode
-            updateCaptureButtonIcon()
-            updateModeIndicator(isVideoMode)
-            updateStatusWithTimeout(
-                if (isVideoMode) StatusMessages.VIDEO_MODE 
-                else StatusMessages.PHOTO_MODE
-            )
+            if (cameraManager.isVideoMode()) {
+                // Toggle recording
+                handleVideoButtonClick()
+            } else {
+                // Switch to video mode
+                cameraManager.toggleVideoMode()
+                updateModeIndicator(true)
+                updateStatusWithTimeout(StatusMessages.VIDEO_MODE)
+            }
         }
 
         // Open app button
@@ -378,6 +403,18 @@ class DeviceActivity : Activity(), LifecycleOwner {
             .start()
     }
 
+    private fun handleVideoButtonClick() {
+        if (cameraManager.isRecording()) {
+            cameraManager.stopVideoRecording()
+        } else {
+            cameraManager.startVideoRecording()
+        }
+    }
+
+    private fun startVideoCountdown(seconds: Int) {
+        cameraManager.startVideoRecording(seconds)
+    }
+
     /**
      * Checks if all required permissions are granted
      * @return true if all permissions are granted, false otherwise
@@ -393,16 +430,20 @@ class DeviceActivity : Activity(), LifecycleOwner {
         permissions: Array<out String>,
         grantResults: IntArray
     ) {
-        when (requestCode) {
-            REQUEST_CODE_PERMISSIONS -> {
-                if (allPermissionsGranted()) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == REQUEST_CODE_PERMISSIONS) {
+            if (allPermissionsGranted()) {
+                try {
                     cameraManager.startCamera()
-                } else {
-                    Toast.makeText(this, "Camera permission denied", Toast.LENGTH_SHORT).show()
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to start camera after permission grant", e)
+                    Toast.makeText(this, "Failed to start camera: ${e.message}", Toast.LENGTH_LONG).show()
                     finish()
                 }
+            } else {
+                Toast.makeText(this, "Permissions not granted by the user.", Toast.LENGTH_SHORT).show()
+                finish()
             }
-            else -> super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         }
     }
 }

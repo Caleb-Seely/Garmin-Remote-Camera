@@ -13,6 +13,12 @@ class CameraState {
     var isFrontCamera = false
         private set
 
+    var isRecording = false
+        private set
+
+    var recordingStartTime: Long = 0
+        private set
+
     /**
      * Updates the camera facing state and returns whether flash should be available
      */
@@ -57,5 +63,32 @@ class CameraState {
      */
     fun shouldUseFlashForCountdown(): Boolean {
         return !isFrontCamera && isFlashEnabled
+    }
+
+    /**
+     * Starts video recording
+     */
+    fun startRecording() {
+        isRecording = true
+        recordingStartTime = System.currentTimeMillis()
+    }
+
+    /**
+     * Stops video recording
+     */
+    fun stopRecording() {
+        isRecording = false
+        recordingStartTime = 0
+    }
+
+    /**
+     * Gets the current recording duration in seconds
+     */
+    fun getRecordingDuration(): Long {
+        return if (isRecording) {
+            (System.currentTimeMillis() - recordingStartTime) / 1000
+        } else {
+            0
+        }
     }
 } 

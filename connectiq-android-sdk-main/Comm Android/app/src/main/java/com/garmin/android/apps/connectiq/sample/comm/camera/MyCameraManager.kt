@@ -18,17 +18,27 @@ import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import com.google.common.util.concurrent.ListenableFuture
 import android.graphics.ImageFormat
-
-//For the flash functionality
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-
 import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CameraManager
 import android.widget.TextView
 import android.view.View
+import android.os.Handler
+import android.os.Looper
+
+//video
+import androidx.camera.video.VideoCapture
+import androidx.camera.video.Recorder
+import androidx.camera.video.Recording
+import androidx.camera.video.FileOutputOptions
+import androidx.camera.video.MediaStoreOutputOptions
+import androidx.camera.video.VideoRecordEvent
+import androidx.camera.video.QualitySelector
+import androidx.camera.video.Quality
+
 
 private val scope = CoroutineScope(Dispatchers.Main)
 
@@ -38,7 +48,8 @@ class MyCameraManager(
     private val viewFinder: PreviewView,
     private val onPhotoTaken: (String) -> Unit = {},
     private val onCountdownUpdate: ((Int) -> Unit)? = null,
-    private val onCameraSwapEnabled: ((Boolean) -> Unit)? = null
+    private val onCameraSwapEnabled: ((Boolean) -> Unit)? = null,
+    private val onRecordingStatusUpdate: ((String) -> Unit)? = null
 ) {
     companion object {
         private const val TAG = "MyCameraManager"
@@ -46,6 +57,7 @@ class MyCameraManager(
     }
 
     private var imageCapture: ImageCapture? = null
+    private var videoCapture: VideoCapture<Recorder>? = null
     private var camera: Camera? = null
     private lateinit var cameraExecutor: ExecutorService
     private var isCameraInitialized = false
@@ -55,6 +67,9 @@ class MyCameraManager(
     private var isCountdownActive = false
     private var currentCountdown = 0
     private val cameraState = CameraState()
+    private val handler = Handler(Looper.getMainLooper())
+    private var recordingStatusRunnable: Runnable? = null
+    private var currentRecording: Recording? = null
 
     init {
         cameraExecutor = Executors.newSingleThreadExecutor()
@@ -88,61 +103,58 @@ class MyCameraManager(
             // ImageCapture with maximum quality settings
             imageCapture = ImageCapture.Builder()
                 .setTargetRotation(viewFinder.display.rotation)
-                // Use maximum quality mode
                 .setCaptureMode(ImageCapture.CAPTURE_MODE_MAXIMIZE_QUALITY)
-                // Set flash mode
                 .setFlashMode(if (cameraState.isFlashEnabled) ImageCapture.FLASH_MODE_ON else ImageCapture.FLASH_MODE_OFF)
-                // Use the highest available stable resolution
-                .setTargetResolution(android.util.Size(8000, 6000))  // This will automatically fall back to highest available
-                // Maximum JPEG quality
+                .setTargetResolution(android.util.Size(8000, 6000))
                 .setJpegQuality(100)
                 .build()
 
-            try {
-                // Unbind all use cases before rebinding
-                cameraProvider.unbindAll()
+            // VideoCapture with high quality settings
+            val recorder = Recorder.Builder()
+                .setQualitySelector(QualitySelector.from(Quality.HIGHEST))
+                .build()
+            videoCapture = VideoCapture.withOutput(recorder)
 
-                // Get camera with highest quality configuration
-                val cameraSelector = CameraSelector.Builder()
-                    .requireLensFacing(if (currentCameraSelector == CameraSelector.DEFAULT_BACK_CAMERA) 
-                        CameraSelector.LENS_FACING_BACK else CameraSelector.LENS_FACING_FRONT)
-                    .build()
+            // Unbind all use cases before rebinding
+            cameraProvider.unbindAll()
 
-                // Bind use cases to camera
-                camera = cameraProvider.bindToLifecycle(
-                    lifecycleOwner,
-                    cameraSelector,
-                    preview,
-                    imageCapture
-                )
+            // Get camera with highest quality configuration
+            val cameraSelector = CameraSelector.Builder()
+                .requireLensFacing(if (currentCameraSelector == CameraSelector.DEFAULT_BACK_CAMERA) 
+                    CameraSelector.LENS_FACING_BACK else CameraSelector.LENS_FACING_FRONT)
+                .build()
 
-                // Configure additional camera controls if available
-                camera?.let { cam ->
-                    // Initially disable torch
-                    cam.cameraControl.enableTorch(false)
-                    // Set capture mode to maximize quality
-                    cam.cameraInfo.exposureState.let { exposureState ->
-                        if (exposureState.isExposureCompensationSupported) {
-                            // Set exposure compensation to 0 (neutral)
-                            cam.cameraControl.setExposureCompensationIndex(0)
-                        }
+            // Bind use cases to camera
+            camera = cameraProvider.bindToLifecycle(
+                lifecycleOwner,
+                cameraSelector,
+                preview,
+                imageCapture,
+                videoCapture
+            )
+
+            // Configure additional camera controls if available
+            camera?.let { cam ->
+                // Initially disable torch
+                cam.cameraControl.enableTorch(false)
+                // Set capture mode to maximize quality
+                cam.cameraInfo.exposureState.let { exposureState ->
+                    if (exposureState.isExposureCompensationSupported) {
+                        cam.cameraControl.setExposureCompensationIndex(0)
                     }
                 }
-
-                isCameraInitialized = true
-                isCameraActive = true
-                Log.d(TAG, "Camera initialized and active with highest quality settings")
-
-                // Update countdown display after successful camera switch
-                if (isCountdownActive) {
-                    updateCountdownDisplay(currentCountdown)
-                }
-            } catch (exc: Exception) {
-                handleCameraBindingError(exc, cameraProvider)
             }
-        } catch (e: Exception) {
-            Log.e(TAG, "Use case configuration failed", e)
-            Toast.makeText(context, "Camera configuration failed: ${e.message}", Toast.LENGTH_SHORT).show()
+
+            isCameraInitialized = true
+            isCameraActive = true
+            Log.d(TAG, "Camera initialized and active with highest quality settings")
+
+            // Update countdown display after successful camera switch
+            if (isCountdownActive) {
+                updateCountdownDisplay(currentCountdown)
+            }
+        } catch (exc: Exception) {
+            handleCameraBindingError(exc, cameraProvider)
         }
     }
 
@@ -390,21 +402,161 @@ class MyCameraManager(
         }
     }
 
+    fun startVideoRecording(delaySeconds: Int = 0) {
+        if (!isCameraInitialized || !isCameraActive) {
+            Log.e(TAG, "Camera not initialized or not active")
+            Toast.makeText(context, "Camera not ready. Restarting...", Toast.LENGTH_SHORT).show()
+            startCamera()
+            return
+        }
+
+        val videoCapture = videoCapture ?: run {
+            Log.e(TAG, "VideoCapture is null")
+            Toast.makeText(context, "Camera not configured properly", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        if (delaySeconds > 0) {
+            isCountdownActive = true
+            currentCountdown = delaySeconds
+            onCameraSwapEnabled?.invoke(false)
+            
+            scope.launch {
+                var remainingSeconds = delaySeconds
+                while (remainingSeconds > 0 && isCountdownActive) {
+                    updateCountdownDisplay(remainingSeconds)
+                    
+                    if (cameraState.shouldUseFlashForCountdown()) {
+                        if (remainingSeconds > 1) {
+                            flashBriefly("normal", 0.2f)
+                        } else if (remainingSeconds == 1) {
+                            flashBriefly("final", 0.6f)
+                        }
+                    }
+                    remainingSeconds--
+                    delay(1000)
+                }
+                
+                if (isCountdownActive) {
+                    updateCountdownDisplay(0)
+                    startRecording(videoCapture)
+                }
+                isCountdownActive = false
+                currentCountdown = 0
+                onCameraSwapEnabled?.invoke(true)
+            }
+        } else {
+            startRecording(videoCapture)
+        }
+    }
+
+    private fun startRecording(videoCapture: VideoCapture<Recorder>) {
+        try {
+            val name = SimpleDateFormat(FILENAME_FORMAT, Locale.US)
+                .format(System.currentTimeMillis())
+            val contentValues = ContentValues().apply {
+                put(MediaStore.MediaColumns.DISPLAY_NAME, "VID_$name")
+                put(MediaStore.MediaColumns.MIME_TYPE, "video/mp4")
+                if (Build.VERSION.SDK_INT > Build.VERSION_CODES.P) {
+                    put(MediaStore.Video.Media.RELATIVE_PATH, "DCIM/Camera")
+                    put(MediaStore.Video.Media.IS_PENDING, 1)
+                }
+            }
+
+            val mediaStoreOutputOptions = MediaStoreOutputOptions
+                .Builder(context.contentResolver, MediaStore.Video.Media.EXTERNAL_CONTENT_URI)
+                .setContentValues(contentValues)
+                .build()
+
+            currentRecording = videoCapture.output
+                .prepareRecording(context, mediaStoreOutputOptions)
+                .apply { 
+                    if (cameraState.isFlashEnabled && !cameraState.isFrontCamera) {
+                        camera?.cameraControl?.enableTorch(true)
+                    }
+                }
+                .start(ContextCompat.getMainExecutor(context)) { recordEvent ->
+                    when(recordEvent) {
+                        is VideoRecordEvent.Start -> {
+                            cameraState.startRecording()
+                            startRecordingStatusUpdates()
+                            onRecordingStatusUpdate?.invoke("Recording started")
+                        }
+                        is VideoRecordEvent.Finalize -> {
+                            if (recordEvent.hasError()) {
+                                Log.e(TAG, "Video capture failed: ${recordEvent.cause}")
+                                Toast.makeText(context, "Failed to record video: ${recordEvent.cause}", Toast.LENGTH_SHORT).show()
+                            } else {
+                                onRecordingStatusUpdate?.invoke("Video saved successfully")
+                            }
+                            stopRecordingStatusUpdates()
+                            currentRecording = null
+                        }
+                    }
+                }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error starting video recording", e)
+            Toast.makeText(context, "Error starting video recording: ${e.message}", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    fun stopVideoRecording() {
+        try {
+            currentRecording?.stop()
+            cameraState.stopRecording()
+            stopRecordingStatusUpdates()
+            onRecordingStatusUpdate?.invoke("Recording stopped")
+            
+            // Turn off torch if it was on
+            if (cameraState.isFlashEnabled && !cameraState.isFrontCamera) {
+                camera?.cameraControl?.enableTorch(false)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error stopping video recording", e)
+            Toast.makeText(context, "Error stopping video recording: ${e.message}", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun startRecordingStatusUpdates() {
+        recordingStatusRunnable = object : Runnable {
+            override fun run() {
+                if (cameraState.isRecording) {
+                    val duration = cameraState.getRecordingDuration()
+                    onRecordingStatusUpdate?.invoke("Recording... ${duration} sec")
+                    handler.postDelayed(this, 1000)
+                }
+            }
+        }
+        handler.post(recordingStatusRunnable!!)
+    }
+
+    private fun stopRecordingStatusUpdates() {
+        recordingStatusRunnable?.let { handler.removeCallbacks(it) }
+        recordingStatusRunnable = null
+    }
+
+    fun isRecording(): Boolean {
+        return cameraState.isRecording
+    }
+
+    fun isVideoMode(): Boolean {
+        return cameraState.isVideoMode
+    }
+
+    fun toggleVideoMode(): Boolean {
+        return cameraState.toggleVideoMode()
+    }
+
     fun shutdown() {
-        isCountdownActive = false
-        currentCountdown = 0
-        updateCountdownDisplay(0)
-        // Make sure camera swap button is enabled when shutting down
-        onCameraSwapEnabled?.invoke(true)
+        stopVideoRecording()
         cameraExecutor.shutdown()
         try {
-            if (!cameraExecutor.awaitTermination(1000, TimeUnit.MILLISECONDS)) {
+            if (!cameraExecutor.awaitTermination(800, TimeUnit.MILLISECONDS)) {
                 cameraExecutor.shutdownNow()
             }
         } catch (e: InterruptedException) {
             cameraExecutor.shutdownNow()
         }
-        isCameraActive = false
     }
 
     fun isActive() = isCameraActive
