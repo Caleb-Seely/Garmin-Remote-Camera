@@ -56,6 +56,7 @@ import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import com.garmin.android.apps.connectiq.sample.comm.camera.MyCameraManager
 import com.garmin.android.apps.connectiq.sample.comm.connectiq.ConnectIQManager
+import android.widget.ImageButton
 
 
 // TODO Add a valid store app id.
@@ -64,7 +65,9 @@ private const val STORE_APP_ID = ""
 class DeviceActivity : Activity(), LifecycleOwner {
     // Implement getLifecycle() method required by LifecycleOwner
     private val lifecycleRegistry = LifecycleRegistry(this)
-    override fun getLifecycle(): Lifecycle = lifecycleRegistry
+    override val lifecycle: Lifecycle
+        get() = lifecycleRegistry
+
 
     companion object {
         private const val TAG = "DeviceActivity"
@@ -89,10 +92,15 @@ class DeviceActivity : Activity(), LifecycleOwner {
     }
 
     private var deviceStatusView: TextView? = null
-    private var openAppButtonView: TextView? = null
+    private var openAppButtonView: ImageButton? = null
     private lateinit var statusTextView: TextView
     private lateinit var countdownTextView: TextView
-    private lateinit var cameraFlipButton: View
+    private lateinit var cameraFlipButton: ImageButton
+    private lateinit var flashToggleButton: ImageButton
+    private lateinit var captureButton: ImageButton
+    private lateinit var videoButton: ImageButton
+    private var isFlashEnabled = false
+    private var isVideoMode = false
 
     private val connectIQ: ConnectIQ = ConnectIQ.getInstance()
     private lateinit var device: IQDevice
@@ -103,16 +111,16 @@ class DeviceActivity : Activity(), LifecycleOwner {
     private val openAppListener = ConnectIQ.IQOpenApplicationListener { _, _, status ->
         runOnUiThread {
             Log.d(TAG, "App status changed: ${status.name}")
-        Toast.makeText(applicationContext, "App Status: " + status.name, Toast.LENGTH_SHORT).show()
+            Toast.makeText(applicationContext, "App Status: " + status.name, Toast.LENGTH_SHORT).show()
 
-        if (status == ConnectIQ.IQOpenApplicationStatus.APP_IS_ALREADY_RUNNING) {
-            appIsOpen = true
-            openAppButtonView?.setText(R.string.open_app_already_open)
-        } else {
-            appIsOpen = false
-            openAppButtonView?.setText(R.string.open_app_open)
+            if (status == ConnectIQ.IQOpenApplicationStatus.APP_IS_ALREADY_RUNNING) {
+                appIsOpen = true
+                openAppButtonView?.setImageResource(R.drawable.ic_baseline_send_24)
+            } else {
+                appIsOpen = false
+                openAppButtonView?.setImageResource(R.drawable.ic_baseline_send_24)
+            }
         }
-    }
     }
 
     private var currentPhotoPath: String? = null
@@ -136,10 +144,6 @@ class DeviceActivity : Activity(), LifecycleOwner {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_device)
-        setupButtons()
-        
-
-        lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_CREATE)
 
         try {
             device = intent.getParcelableExtra<Parcelable>(EXTRA_IQ_DEVICE) as IQDevice
@@ -147,30 +151,49 @@ class DeviceActivity : Activity(), LifecycleOwner {
 
             // Initialize views
             statusTextView = findViewById(R.id.status_text)
-            countdownTextView = findViewById(R.id.countdown_text)  //Front cam timer
+            countdownTextView = findViewById(R.id.countdown_text)
             openAppButtonView = findViewById(R.id.openapp)
             viewFinder = findViewById(R.id.viewFinder)
             cameraFlipButton = findViewById(R.id.camera_flip_button)
+            flashToggleButton = findViewById(R.id.flash_toggle_button)
+            captureButton = findViewById(R.id.capture_button)
+            videoButton = findViewById(R.id.video_button)
 
-            // Initialize managers
-            cameraManager = MyCameraManager(
-                this,
-                this,
-                viewFinder,
-                onPhotoTaken = { status ->
-                    statusTextView.text = status
-                    connectIQManager.sendMessage(status)
-                },
-                onCountdownUpdate = { seconds ->
-                    runOnUiThread {
-                        countdownTextView.text = if (seconds > 0) seconds.toString() else ""
-                        countdownTextView.visibility = if (seconds > 0) View.VISIBLE else View.GONE
+            // Set initial icons
+            flashToggleButton.setImageResource(R.drawable.ic_baseline_flash_off_24)
+            videoButton.setImageResource(R.drawable.ic_baseline_videocam_24)
+            captureButton.setImageResource(R.drawable.ic_baseline_camera_24)
+
+            // Initialize managers with error handling
+            try {
+                cameraManager = MyCameraManager(
+                    this,
+                    this,
+                    viewFinder,
+                    onPhotoTaken = { status ->
+                        runOnUiThread {
+                            statusTextView.text = status
+                            connectIQManager.sendMessage(status)
+                        }
+                    },
+                    onCountdownUpdate = { seconds ->
+                        runOnUiThread {
+                            countdownTextView.text = if (seconds > 0) seconds.toString() else ""
+                            countdownTextView.visibility = if (seconds > 0) View.VISIBLE else View.GONE
+                        }
+                    },
+                    onCameraSwapEnabled = { enabled ->
+                        runOnUiThread {
+                            cameraFlipButton.visibility = if (enabled) View.VISIBLE else View.GONE
+                        }
                     }
-                },
-                onCameraSwapEnabled = { enabled ->
-                    cameraFlipButton.visibility = if (enabled) View.VISIBLE else View.GONE
-                }
-            )
+                )
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to initialize camera manager", e)
+                Toast.makeText(this, "Camera initialization failed: ${e.message}", Toast.LENGTH_LONG).show()
+                finish()
+                return
+            }
 
             connectIQManager = ConnectIQManager(this, device, statusTextView) { delaySeconds ->
                 if (delaySeconds == -1) {
@@ -184,15 +207,17 @@ class DeviceActivity : Activity(), LifecycleOwner {
                 }
             }
 
-            // Set up click listeners
-            openAppButtonView?.setOnClickListener { connectIQManager.openApp() }
-            findViewById<View>(R.id.camera_flip_button).setOnClickListener {
-                cameraManager.flipCamera()
-            }
+            setupClickListeners()
 
-            // Initialize camera
+            // Initialize camera with permission check
             if (allPermissionsGranted()) {
-                cameraManager.startCamera()
+                try {
+                    cameraManager.startCamera()
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to start camera", e)
+                    Toast.makeText(this, "Failed to start camera: ${e.message}", Toast.LENGTH_LONG).show()
+                    finish()
+                }
             } else {
                 ActivityCompat.requestPermissions(
                     this, REQUIRED_PERMISSIONS, REQUEST_CODE_PERMISSIONS
@@ -204,7 +229,8 @@ class DeviceActivity : Activity(), LifecycleOwner {
 
         } catch (e: Exception) {
             Log.e(TAG, "Error in onCreate", e)
-            Toast.makeText(this, "Error initializing camera: ${e.message}", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, "Error initializing app: ${e.message}", Toast.LENGTH_LONG).show()
+            finish()
         }
     }
 
@@ -249,24 +275,61 @@ class DeviceActivity : Activity(), LifecycleOwner {
         }
     }
 
-//    private fun openStore() {
-//        Toast.makeText(this, "Opening ConnectIQ Store...", Toast.LENGTH_SHORT).show()
-//
-//        // Send a message to open the store
-//        try {
-//            if (STORE_APP_ID.isBlank()) {
-//                AlertDialog.Builder(this@DeviceActivity)
-//                    .setTitle(R.string.missing_store_id)
-//                    .setMessage(R.string.missing_store_id_message)
-//                    .setPositiveButton(android.R.string.ok, null)
-//                    .create()
-//                    .show()
-//            } else {
-//                connectIQ.openStore(STORE_APP_ID)
-//            }
-//        } catch (_: Exception) {
-//        }
-//    }
+    private fun setupClickListeners() {
+        // Camera flip button
+        cameraFlipButton.setOnClickListener {
+            cameraManager.flipCamera()
+        }
+
+        // Flash toggle button
+        flashToggleButton.setOnClickListener {
+            isFlashEnabled = !isFlashEnabled
+            flashToggleButton.isSelected = isFlashEnabled
+            cameraManager.toggleFlash()
+            updateFlashButtonIcon()
+        }
+
+        // Capture button
+        captureButton.setOnClickListener {
+            if (!isVideoMode) {
+                cameraManager.takePhoto()
+            } else {
+                // TODO: Implement video recording
+                Toast.makeText(this, "Video recording not implemented yet", Toast.LENGTH_SHORT).show()
+            }
+        }
+
+        // Video mode toggle button
+        videoButton.setOnClickListener {
+            isVideoMode = !isVideoMode
+            updateCaptureButtonIcon()
+            Toast.makeText(this, if (isVideoMode) "Video mode" else "Photo mode", Toast.LENGTH_SHORT).show()
+        }
+
+        // Open app button
+        findViewById<View>(R.id.openapp).setOnClickListener {
+            connectIQManager.openApp()
+        }
+
+        // Send test message button
+        findViewById<View>(R.id.send_test_msg_button).setOnClickListener {
+            connectIQManager.sendMessage("Test Message")
+        }
+    }
+
+    private fun updateFlashButtonIcon() {
+        flashToggleButton.setImageResource(
+            if (isFlashEnabled) R.drawable.ic_baseline_flash_on_24
+            else R.drawable.ic_baseline_flash_off_24
+        )
+    }
+
+    private fun updateCaptureButtonIcon() {
+        captureButton.setImageResource(
+            if (isVideoMode) R.drawable.ic_baseline_videocam_24
+            else R.drawable.ic_baseline_camera_24
+        )
+    }
 
     private fun startCountdown(seconds: Int) {
         cameraManager.takePhoto(seconds)
