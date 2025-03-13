@@ -57,6 +57,8 @@ import java.util.concurrent.TimeUnit
 import com.garmin.android.apps.connectiq.sample.comm.camera.MyCameraManager
 import com.garmin.android.apps.connectiq.sample.comm.connectiq.ConnectIQManager
 import android.widget.ImageButton
+import com.garmin.android.apps.connectiq.sample.comm.ui.UIConstants
+import com.garmin.android.apps.connectiq.sample.comm.ui.StatusMessages
 
 
 // TODO Add a valid store app id.
@@ -99,6 +101,7 @@ class DeviceActivity : Activity(), LifecycleOwner {
     private lateinit var flashToggleButton: ImageButton
     private lateinit var captureButton: ImageButton
     private lateinit var videoButton: ImageButton
+    private lateinit var modeIndicator: View
     private var isFlashEnabled = false
     private var isVideoMode = false
 
@@ -158,11 +161,7 @@ class DeviceActivity : Activity(), LifecycleOwner {
             flashToggleButton = findViewById(R.id.flash_toggle_button)
             captureButton = findViewById(R.id.capture_button)
             videoButton = findViewById(R.id.video_button)
-
-            // Set initial icons
-            flashToggleButton.setImageResource(R.drawable.ic_baseline_flash_off_24)
-            videoButton.setImageResource(R.drawable.ic_baseline_videocam_24)
-            captureButton.setImageResource(R.drawable.ic_baseline_camera_24)
+            modeIndicator = findViewById(R.id.mode_indicator)
 
             // Initialize managers with error handling
             try {
@@ -188,6 +187,15 @@ class DeviceActivity : Activity(), LifecycleOwner {
                         }
                     }
                 )
+
+                // Set initial icons and states after camera manager is initialized
+                isFlashEnabled = false
+                flashToggleButton.setImageResource(R.drawable.ic_baseline_flash_off_24)
+                flashToggleButton.isEnabled = !cameraManager.isFrontCamera()
+                flashToggleButton.alpha = if (cameraManager.isFrontCamera()) 0.5f else 1.0f
+                videoButton.setImageResource(R.drawable.ic_baseline_videocam_24)
+                captureButton.setImageResource(R.drawable.ic_baseline_camera_24)
+                updateStatusWithTimeout("Camera ready")
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to initialize camera manager", e)
                 Toast.makeText(this, "Camera initialization failed: ${e.message}", Toast.LENGTH_LONG).show()
@@ -279,23 +287,36 @@ class DeviceActivity : Activity(), LifecycleOwner {
         // Camera flip button
         cameraFlipButton.setOnClickListener {
             cameraManager.flipCamera()
+            // Disable flash for front camera
+            if (cameraManager.isFrontCamera()) {
+                isFlashEnabled = false
+                flashToggleButton.isEnabled = false
+                flashToggleButton.alpha = UIConstants.BUTTON_DISABLED_ALPHA
+                updateFlashButtonIcon()
+            } else {
+                flashToggleButton.isEnabled = true
+                flashToggleButton.alpha = UIConstants.BUTTON_ENABLED_ALPHA
+            }
         }
 
         // Flash toggle button
         flashToggleButton.setOnClickListener {
-            isFlashEnabled = !isFlashEnabled
-            flashToggleButton.isSelected = isFlashEnabled
-            cameraManager.toggleFlash()
-            updateFlashButtonIcon()
+            if (!cameraManager.isFrontCamera()) {
+                isFlashEnabled = !isFlashEnabled
+                flashToggleButton.isSelected = isFlashEnabled
+                cameraManager.toggleFlash()
+                updateFlashButtonIcon()
+                updateStatusWithTimeout(
+                    if (isFlashEnabled) StatusMessages.FLASH_ENABLED 
+                    else StatusMessages.FLASH_DISABLED
+                )
+            }
         }
 
         // Capture button
         captureButton.setOnClickListener {
             if (!isVideoMode) {
                 cameraManager.takePhoto()
-            } else {
-                // TODO: Implement video recording
-                Toast.makeText(this, "Video recording not implemented yet", Toast.LENGTH_SHORT).show()
             }
         }
 
@@ -303,7 +324,11 @@ class DeviceActivity : Activity(), LifecycleOwner {
         videoButton.setOnClickListener {
             isVideoMode = !isVideoMode
             updateCaptureButtonIcon()
-            Toast.makeText(this, if (isVideoMode) "Video mode" else "Photo mode", Toast.LENGTH_SHORT).show()
+            updateModeIndicator(isVideoMode)
+            updateStatusWithTimeout(
+                if (isVideoMode) StatusMessages.VIDEO_MODE 
+                else StatusMessages.PHOTO_MODE
+            )
         }
 
         // Open app button
@@ -333,6 +358,24 @@ class DeviceActivity : Activity(), LifecycleOwner {
 
     private fun startCountdown(seconds: Int) {
         cameraManager.takePhoto(seconds)
+    }
+
+    private fun updateStatusWithTimeout(message: String, timeoutMs: Long = UIConstants.STATUS_MESSAGE_TIMEOUT) {
+        statusTextView.text = message
+        handler.removeCallbacksAndMessages(null)
+        handler.postDelayed({
+            if (!isFinishing) {
+                statusTextView.text = StatusMessages.CAMERA_READY
+            }
+        }, timeoutMs)
+    }
+
+    private fun updateModeIndicator(isVideo: Boolean) {
+        val targetTranslationX = if (isVideo) videoButton.x - captureButton.x else 0f
+        modeIndicator.animate()
+            .translationX(targetTranslationX)
+            .setDuration(UIConstants.MODE_SWITCH_ANIMATION_DURATION)
+            .start()
     }
 
     /**

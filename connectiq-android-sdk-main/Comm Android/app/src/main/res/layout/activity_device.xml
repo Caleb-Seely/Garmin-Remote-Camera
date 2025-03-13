@@ -71,23 +71,42 @@
             android:src="@drawable/ic_baseline_flip_camera_24"
             android:contentDescription="Flip Camera" />
 
-        <ImageButton
-            android:id="@+id/capture_button"
-            android:layout_width="64dp"
-            android:layout_height="64dp"
+        <FrameLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
             android:layout_marginEnd="16dp"
-            android:background="@drawable/circle_button_background"
-            android:src="@drawable/ic_baseline_camera_24"
-            android:contentDescription="Capture Photo" />
+            android:background="@drawable/camera_video_toggle_background"
+            android:padding="4dp">
 
-        <ImageButton
-            android:id="@+id/video_button"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:layout_marginEnd="16dp"
-            android:background="@android:color/transparent"
-            android:src="@drawable/ic_baseline_videocam_24"
-            android:contentDescription="Record Video" />
+            <View
+                android:id="@+id/mode_indicator"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:background="@drawable/selected_mode_indicator" />
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <ImageButton
+                    android:id="@+id/capture_button"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:background="@android:color/transparent"
+                    android:src="@drawable/ic_baseline_camera_24"
+                    android:contentDescription="Capture Photo" />
+
+                <ImageButton
+                    android:id="@+id/video_button"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:background="@android:color/transparent"
+                    android:src="@drawable/ic_baseline_videocam_24"
+                    android:contentDescription="Record Video" />
+
+            </LinearLayout>
+        </FrameLayout>
 
         <ImageButton
             android:id="@+id/openapp"

@@ -16,6 +16,8 @@ import java.util.*
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import com.google.common.util.concurrent.ListenableFuture
+import android.graphics.ImageFormat
 
 //For the flash functionality
 import kotlinx.coroutines.CoroutineScope
@@ -48,13 +50,11 @@ class MyCameraManager(
     private lateinit var cameraExecutor: ExecutorService
     private var isCameraInitialized = false
     private var isCameraActive = false
-    private var isFlashEnabled = false
     private var currentCameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
     private var photoCount = 0
-    private var isFrontCamera = false
-    private lateinit var countdownText: TextView
-    private var currentCountdown = 0
     private var isCountdownActive = false
+    private var currentCountdown = 0
+    private val cameraState = CameraState()
 
     init {
         cameraExecutor = Executors.newSingleThreadExecutor()
@@ -77,7 +77,7 @@ class MyCameraManager(
 
     private fun bindCamera(cameraProvider: ProcessCameraProvider) {
         try {
-            // Preview
+            // Preview with high quality settings
             val preview = Preview.Builder()
                 .setTargetRotation(viewFinder.display.rotation)
                 .build()
@@ -85,12 +85,16 @@ class MyCameraManager(
                     it.setSurfaceProvider(viewFinder.surfaceProvider)
                 }
 
-            // ImageCapture with high quality settings
+            // ImageCapture with maximum quality settings
             imageCapture = ImageCapture.Builder()
                 .setTargetRotation(viewFinder.display.rotation)
+                // Use maximum quality mode
                 .setCaptureMode(ImageCapture.CAPTURE_MODE_MAXIMIZE_QUALITY)
-                .setFlashMode(if (isFlashEnabled) ImageCapture.FLASH_MODE_ON else ImageCapture.FLASH_MODE_OFF)
-                .setTargetResolution(android.util.Size(4032, 3024))
+                // Set flash mode
+                .setFlashMode(if (cameraState.isFlashEnabled) ImageCapture.FLASH_MODE_ON else ImageCapture.FLASH_MODE_OFF)
+                // Use the highest available stable resolution
+                .setTargetResolution(android.util.Size(8000, 6000))  // This will automatically fall back to highest available
+                // Maximum JPEG quality
                 .setJpegQuality(100)
                 .build()
 
@@ -98,16 +102,36 @@ class MyCameraManager(
                 // Unbind all use cases before rebinding
                 cameraProvider.unbindAll()
 
+                // Get camera with highest quality configuration
+                val cameraSelector = CameraSelector.Builder()
+                    .requireLensFacing(if (currentCameraSelector == CameraSelector.DEFAULT_BACK_CAMERA) 
+                        CameraSelector.LENS_FACING_BACK else CameraSelector.LENS_FACING_FRONT)
+                    .build()
+
                 // Bind use cases to camera
                 camera = cameraProvider.bindToLifecycle(
                     lifecycleOwner,
-                    currentCameraSelector,
+                    cameraSelector,
                     preview,
                     imageCapture
                 )
+
+                // Configure additional camera controls if available
+                camera?.let { cam ->
+                    // Initially disable torch
+                    cam.cameraControl.enableTorch(false)
+                    // Set capture mode to maximize quality
+                    cam.cameraInfo.exposureState.let { exposureState ->
+                        if (exposureState.isExposureCompensationSupported) {
+                            // Set exposure compensation to 0 (neutral)
+                            cam.cameraControl.setExposureCompensationIndex(0)
+                        }
+                    }
+                }
+
                 isCameraInitialized = true
                 isCameraActive = true
-                Log.d(TAG, "Camera initialized and active")
+                Log.d(TAG, "Camera initialized and active with highest quality settings")
 
                 // Update countdown display after successful camera switch
                 if (isCountdownActive) {
@@ -152,7 +176,7 @@ class MyCameraManager(
         // Turn off flash if it was on
         try {
             camera?.cameraControl?.enableTorch(false)
-            isFlashEnabled = false
+            cameraState.disableFlash()
         } catch (e: Exception) {
             Log.e(TAG, "Error turning off flash during cancel", e)
         }
@@ -189,12 +213,15 @@ class MyCameraManager(
                     // Update countdown display based on current camera
                     updateCountdownDisplay(remainingSeconds)
                     
-                    if (remainingSeconds > 1) {
-                        // Regular countdown flash
-                        toggleFlash("normal", 0.2f)
-                    } else if (remainingSeconds == 1) {
-                        // Special signal when about to capture
-                        toggleFlash("final", 0.6f)
+                    // Only flash if enabled and using back camera
+                    if (cameraState.shouldUseFlashForCountdown()) {
+                        if (remainingSeconds > 1) {
+                            // Regular countdown flash
+                            flashBriefly("normal", 0.2f)
+                        } else if (remainingSeconds == 1) {
+                            // Special signal when about to capture
+                            flashBriefly("final", 0.6f)
+                        }
                     }
                     remainingSeconds--
                     delay(1000) // Wait 1 second between countdown steps
@@ -217,7 +244,7 @@ class MyCameraManager(
     }
 
     private fun updateCountdownDisplay(seconds: Int) {
-        if (isFrontCamera) {
+        if (cameraState.isFrontCamera) {
             onCountdownUpdate?.invoke(seconds)
         } else {
             // Always clear the countdown when using back camera
@@ -233,28 +260,47 @@ class MyCameraManager(
             val contentValues = ContentValues().apply {
                 put(MediaStore.MediaColumns.DISPLAY_NAME, name)
                 put(MediaStore.MediaColumns.MIME_TYPE, "image/jpeg")
+                put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
+                put(MediaStore.Images.Media.WIDTH, 8000)  // Target max resolution
+                put(MediaStore.Images.Media.HEIGHT, 6000) // Will automatically adjust to available
                 if (Build.VERSION.SDK_INT > Build.VERSION_CODES.P) {
                     put(MediaStore.Images.Media.RELATIVE_PATH, "DCIM/Camera")
+                    put(MediaStore.Images.Media.IS_PENDING, 1)
                 }
             }
 
             // Create output options object which contains file + metadata
-            val outputOptions = ImageCapture.OutputFileOptions
-                .Builder(context.contentResolver,
-                    MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
-                    contentValues)
-                .build()
+            val outputOptions = ImageCapture.OutputFileOptions.Builder(
+                context.contentResolver,
+                MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                contentValues
+            ).apply {
+                setMetadata(
+                    ImageCapture.Metadata().apply {
+                        // Enable location if available
+                        isReversedHorizontal = currentCameraSelector == CameraSelector.DEFAULT_FRONT_CAMERA
+                    }
+                )
+            }.build()
 
-            // Take the picture
+            // Take the picture with maximum quality
             imageCapture.takePicture(
                 outputOptions,
                 ContextCompat.getMainExecutor(context),
                 object : ImageCapture.OnImageSavedCallback {
                     override fun onImageSaved(output: ImageCapture.OutputFileResults) {
                         photoCount++
-                        val msg = "Photo captured successfully"
+                        val msg = "High quality photo captured successfully"
                         Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
                         Log.d(TAG, "Photo capture succeeded: ${output.savedUri}")
+                        
+                        // Update the IS_PENDING flag after successful save
+                        output.savedUri?.let { uri ->
+                            contentValues.clear()
+                            contentValues.put(MediaStore.Images.Media.IS_PENDING, 0)
+                            context.contentResolver.update(uri, contentValues, null, null)
+                        }
+                        
                         onPhotoTaken("Photos Captured: $photoCount")
                     }
 
@@ -270,58 +316,21 @@ class MyCameraManager(
         }
     }
 
-    // Modified toggleFlash function with pattern support
-    fun toggleFlash(pattern: String = "normal", brightness: Float = 0.5f) {
-        // We need to use the CameraX controls since the camera is already in use
-        when (pattern) {
-            "normal" -> {
-                // Make sure we're not trying to control a camera that's already in use
-                if (camera == null || imageCapture == null) return
-
-                // Basic flash for normal countdown
-                isFlashEnabled = true
-
-                // Use the existing CameraX torch control
-                camera?.cameraControl?.enableTorch(true)
-
-                // Turn off after delay
-                scope.launch {
-                    delay(50)
-                    camera?.cameraControl?.enableTorch(false)
-                    isFlashEnabled = false
-                }
-            }
-            "final" -> {
-                // Triple flash for final second
-                if (camera == null || imageCapture == null) return
-
-                scope.launch {
-                    repeat(2) {
-                        // Turn on torch
-                        isFlashEnabled = true
-                        camera?.cameraControl?.enableTorch(true)
-
-                        delay(50)
-
-                        // Turn off torch
-                        camera?.cameraControl?.enableTorch(false)
-                        isFlashEnabled = false
-
-                        delay(100) // Off for 100ms between flashes
-                    }
-                }
-            }
-        }
+    fun toggleFlash() {
+        // Only update flash mode, don't trigger the flash
+        val isEnabled = cameraState.toggleFlash()
+        imageCapture?.flashMode = if (isEnabled) ImageCapture.FLASH_MODE_ON else ImageCapture.FLASH_MODE_OFF
     }
 
     fun flipCamera() {
         currentCameraSelector = if (currentCameraSelector == CameraSelector.DEFAULT_BACK_CAMERA) {
-            isFrontCamera = true
             CameraSelector.DEFAULT_FRONT_CAMERA
         } else {
-            isFrontCamera = false
             CameraSelector.DEFAULT_BACK_CAMERA
         }
+
+        // Update state and handle flash availability
+        cameraState.updateCameraFacing(currentCameraSelector == CameraSelector.DEFAULT_FRONT_CAMERA)
 
         // Update countdown display based on new camera state
         if (isCountdownActive) {
@@ -334,22 +343,51 @@ class MyCameraManager(
                 val cameraProvider = cameraProviderFuture.get()
                 bindCamera(cameraProvider)
             } catch (exc: Exception) {
-                Log.e(TAG, "Failed to flip camera", exc)
-                Toast.makeText(context, "Failed to switch camera: ${exc.message}", Toast.LENGTH_SHORT).show()
-                // Try to recover by reverting to previous camera
-                isFrontCamera = !isFrontCamera
-                currentCameraSelector = if (isFrontCamera) {
-                    CameraSelector.DEFAULT_FRONT_CAMERA
-                } else {
-                    CameraSelector.DEFAULT_BACK_CAMERA
-                }
-                try {
-                    bindCamera(cameraProviderFuture.get())
-                } catch (e: Exception) {
-                    Log.e(TAG, "Camera recovery failed", e)
-                }
+                handleCameraFlipError(exc, cameraProviderFuture)
             }
         }, ContextCompat.getMainExecutor(context))
+    }
+
+    private fun handleCameraFlipError(exc: Exception, cameraProviderFuture: ListenableFuture<ProcessCameraProvider>) {
+        Log.e(TAG, "Failed to flip camera", exc)
+        Toast.makeText(context, "Failed to switch camera: ${exc.message}", Toast.LENGTH_SHORT).show()
+        // Try to recover by reverting to previous camera
+        currentCameraSelector = if (currentCameraSelector == CameraSelector.DEFAULT_FRONT_CAMERA) {
+            CameraSelector.DEFAULT_BACK_CAMERA
+        } else {
+            CameraSelector.DEFAULT_FRONT_CAMERA
+        }
+        cameraState.updateCameraFacing(currentCameraSelector == CameraSelector.DEFAULT_FRONT_CAMERA)
+        try {
+            bindCamera(cameraProviderFuture.get())
+        } catch (e: Exception) {
+            Log.e(TAG, "Camera recovery failed", e)
+        }
+    }
+
+    private fun flashBriefly(pattern: String, brightness: Float) {
+        when (pattern) {
+            "normal" -> {
+                if (camera == null || imageCapture == null) return
+                camera?.cameraControl?.enableTorch(true)
+                scope.launch {
+                    delay(50)
+                    camera?.cameraControl?.enableTorch(false)
+                }
+            }
+            "final" -> {
+                if (camera == null || imageCapture == null) return
+                scope.launch {
+                    // No double tap bc we handle flash differently for the photo
+//                    repeat(2) {
+//                        camera?.cameraControl?.enableTorch(true)
+//                        delay(50)
+//                        camera?.cameraControl?.enableTorch(false)
+//                        delay(100)
+//                    }
+                }
+            }
+        }
     }
 
     fun shutdown() {
@@ -370,4 +408,6 @@ class MyCameraManager(
     }
 
     fun isActive() = isCameraActive
+
+    fun isFrontCamera() = cameraState.isFrontCamera
 }
