@@ -55,7 +55,7 @@ class CommListener extends Communications.ConnectionListener {
 
 
 // Function to safely transmit data
-function safeTransmit(video) {
+function safeTransmit(swap) {
     
     AppState.isTransmitting = true;
     var listener = new CommListener();
@@ -68,10 +68,10 @@ function safeTransmit(video) {
         return;
     }
 
-    if (video) {
+    if (swap) {
         // Send "VIDEO " + time option
-        System.println("Transmit Video: " + AppState.timeOptions[AppState.selectedIndex] );
-        Communications.transmit("VIDEO " + AppState.timeOptions[AppState.selectedIndex], null, listener);
+        System.println("Swap capture method: " + AppState.timeOptions[AppState.selectedIndex] );
+        Communications.transmit("SWAP " + AppState.timeOptions[AppState.selectedIndex], null, listener);
     } else {
         // Original behavior for normal transmit
         System.println("Transmit Normal");

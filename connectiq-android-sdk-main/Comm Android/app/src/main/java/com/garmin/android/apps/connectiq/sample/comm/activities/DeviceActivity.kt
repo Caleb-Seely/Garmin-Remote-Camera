@@ -214,56 +214,62 @@ class DeviceActivity : Activity(), LifecycleOwner {
                 return
             }
 
-            connectIQManager = ConnectIQManager(this, device, statusTextView) { delaySeconds ->
-                when {
-                    delaySeconds == -1 -> {
-                        // Cancel request received or stop recording
-                        if (cameraManager.isRecording()) {
-                            cameraManager.stopVideoRecording()
-                            statusTextView.text = StatusMessages.RECORDING_STOPPED
-                            countdownTextView.text = ""
-                            countdownTextView.visibility = View.GONE
-                        } else {
-                            cameraManager.cancelPhoto()
-                            statusTextView.text = StatusMessages.RECORDING_CANCELLED
+            connectIQManager = ConnectIQManager(
+                this, 
+                device, 
+                statusTextView,
+                cameraManager,  // Pass the same instance
+                onPhotoRequest = { delaySeconds ->
+                    when {
+                        delaySeconds == -1 -> {
+                            // Cancel request received or stop recording
+                            if (cameraManager.isRecording()) {
+                                cameraManager.stopVideoRecording()
+                                statusTextView.text = StatusMessages.RECORDING_STOPPED
+                                countdownTextView.text = ""
+                                countdownTextView.visibility = View.GONE
+                            } else {
+                                cameraManager.cancelPhoto()
+                                statusTextView.text = StatusMessages.RECORDING_CANCELLED
+                            }
                         }
-                    }
-                    delaySeconds == -2 -> {
-                        // Immediate video command
-                        if (!cameraManager.isVideoMode()) {
-                            cameraManager.toggleVideoMode()
-                            updateModeIndicator(true)
-                            updateStatusWithTimeout(StatusMessages.VIDEO_MODE)
+                        delaySeconds == -2 -> {
+                            // Immediate video command
+                            if (!cameraManager.isVideoMode()) {
+                                cameraManager.toggleVideoMode()
+                                updateModeIndicator(true)
+                                updateStatusWithTimeout(StatusMessages.VIDEO_MODE)
+                            }
+                            cameraManager.startVideoRecording()
                         }
-                        cameraManager.startVideoRecording()
-                    }
-                    delaySeconds < -2 -> {
-                        // Delayed video command (convert back to positive delay)
-                        val actualDelay = -(delaySeconds + 3)
-                        if (!cameraManager.isVideoMode()) {
-                            cameraManager.toggleVideoMode()
-                            updateModeIndicator(true)
+                        delaySeconds < -2 -> {
+                            // Delayed video command (convert back to positive delay)
+                            val actualDelay = -(delaySeconds + 3)
+                            if (!cameraManager.isVideoMode()) {
+                                cameraManager.toggleVideoMode()
+                                updateModeIndicator(true)
+                            }
+                            startVideoCountdown(actualDelay)
                         }
-                        startVideoCountdown(actualDelay)
-                    }
-                    delaySeconds > 0 -> {
-                        // Regular photo with delay
-                        if (cameraManager.isVideoMode()) {
-                            cameraManager.toggleVideoMode()
-                            updateModeIndicator(false)
+                        delaySeconds > 0 -> {
+                            // Regular photo with delay
+                            if (cameraManager.isVideoMode()) {
+                                cameraManager.toggleVideoMode()
+                                updateModeIndicator(false)
+                            }
+                            startCountdown(delaySeconds)
                         }
-                        startCountdown(delaySeconds)
-                    }
-                    else -> {
-                        // Immediate photo
-                        if (cameraManager.isVideoMode()) {
-                            cameraManager.toggleVideoMode()
-                            updateModeIndicator(false)
+                        else -> {
+                            // Immediate photo
+                            if (cameraManager.isVideoMode()) {
+                                cameraManager.toggleVideoMode()
+                                updateModeIndicator(false)
+                            }
+                            cameraManager.takePhoto()
                         }
-                        cameraManager.takePhoto()
                     }
                 }
-            }
+            )
 
 
 

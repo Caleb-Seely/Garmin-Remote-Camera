@@ -452,16 +452,20 @@ class MyCameraManager(
 
     private fun startRecording(videoCapture: VideoCapture<Recorder>) {
         try {
+            Log.d(TAG, "Starting recording on cameraManager instance: ${System.identityHashCode(this)}")
+            cameraState.startRecording()
+            Log.d(TAG, "Set recording state to true, current state: ${cameraState.isRecording}")
+            
             val name = SimpleDateFormat(FILENAME_FORMAT, Locale.US)
                 .format(System.currentTimeMillis())
             val contentValues = ContentValues().apply {
-                put(MediaStore.MediaColumns.DISPLAY_NAME, "VID_$name")
-                put(MediaStore.MediaColumns.MIME_TYPE, "video/mp4")
-                if (Build.VERSION.SDK_INT > Build.VERSION_CODES.P) {
-                    put(MediaStore.Video.Media.RELATIVE_PATH, "DCIM/Camera")
-                    put(MediaStore.Video.Media.IS_PENDING, 1)
+                    put(MediaStore.MediaColumns.DISPLAY_NAME, "VID_$name")
+                    put(MediaStore.MediaColumns.MIME_TYPE, "video/mp4")
+                    if (Build.VERSION.SDK_INT > Build.VERSION_CODES.P) {
+                        put(MediaStore.Video.Media.RELATIVE_PATH, "DCIM/Camera")
+                        put(MediaStore.Video.Media.IS_PENDING, 1)
+                    }
                 }
-            }
 
             val mediaStoreOutputOptions = MediaStoreOutputOptions
                 .Builder(context.contentResolver, MediaStore.Video.Media.EXTERNAL_CONTENT_URI)
@@ -478,11 +482,12 @@ class MyCameraManager(
                 .start(ContextCompat.getMainExecutor(context)) { recordEvent ->
                     when(recordEvent) {
                         is VideoRecordEvent.Start -> {
-                            cameraState.startRecording()
+                            Log.d(TAG, "Received VideoRecordEvent.Start, recording state: ${cameraState.isRecording}")
                             startRecordingStatusUpdates()
                             onRecordingStatusUpdate?.invoke("Recording started")
                         }
                         is VideoRecordEvent.Finalize -> {
+                            Log.d(TAG, "Received VideoRecordEvent.Finalize, recording state: ${cameraState.isRecording}")
                             if (recordEvent.hasError()) {
                                 Log.e(TAG, "Video capture failed: ${recordEvent.cause}")
                                 Toast.makeText(context, "Failed to record video: ${recordEvent.cause}", Toast.LENGTH_SHORT).show()
@@ -491,12 +496,17 @@ class MyCameraManager(
                             }
                             stopRecordingStatusUpdates()
                             currentRecording = null
+                            cameraState.stopRecording()
+                            Log.d(TAG, "After stopping recording, state: ${cameraState.isRecording}")
                         }
                     }
                 }
         } catch (e: Exception) {
             Log.e(TAG, "Error starting video recording", e)
             Toast.makeText(context, "Error starting video recording: ${e.message}", Toast.LENGTH_SHORT).show()
+            // Reset recording state if start failed
+            cameraState.stopRecording()
+            Log.d(TAG, "Recording failed to start, reset state: ${cameraState.isRecording}")
         }
     }
 
@@ -536,7 +546,9 @@ class MyCameraManager(
     }
 
     fun isRecording(): Boolean {
-        return cameraState.isRecording
+        val recordingState = cameraState.isRecording
+        Log.d(TAG, "isRecording() called, returning: $recordingState")
+        return recordingState
     }
 
     fun isVideoMode(): Boolean {
