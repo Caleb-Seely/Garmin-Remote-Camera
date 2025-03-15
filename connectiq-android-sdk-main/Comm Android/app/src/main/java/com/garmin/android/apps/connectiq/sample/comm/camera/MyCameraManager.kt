@@ -28,6 +28,7 @@ import android.widget.TextView
 import android.view.View
 import android.os.Handler
 import android.os.Looper
+import kotlinx.coroutines.cancel
 
 //video
 import androidx.camera.video.VideoCapture
@@ -40,7 +41,7 @@ import androidx.camera.video.QualitySelector
 import androidx.camera.video.Quality
 
 
-private val scope = CoroutineScope(Dispatchers.Main)
+private var scope = CoroutineScope(Dispatchers.Main)
 
 class MyCameraManager(
     private val context: Context,
@@ -180,11 +181,20 @@ class MyCameraManager(
     }
 
     fun cancelPhoto() {
+        Log.d(TAG, "cancelPhoto() called")
+        // First, mark as cancelled
         isCountdownActive = false
         currentCountdown = 0
+        
+        // Clear UI
         updateCountdownDisplay(0)
-        // Re-enable camera swap button
         onCameraSwapEnabled?.invoke(true)
+        
+        // Cancel all pending operations
+        handler.removeCallbacksAndMessages(null)
+        scope.cancel()
+        scope = CoroutineScope(Dispatchers.Main)
+        
         // Turn off flash if it was on
         try {
             camera?.cameraControl?.enableTorch(false)
@@ -192,9 +202,33 @@ class MyCameraManager(
         } catch (e: Exception) {
             Log.e(TAG, "Error turning off flash during cancel", e)
         }
+        Log.d(TAG, "cancelPhoto() completed")
+    }
+
+    // Add new method to handle both photo and video cancellation
+    fun cancelCapture() {
+        Log.d(TAG, "cancelCapture() called, isVideoMode: ${cameraState.isVideoMode}")
+        if (cameraState.isVideoMode) {
+            // If we're in video mode and recording, stop recording
+            if (isRecording()) {
+                stopVideoRecording()
+            } else {
+                // If we're not recording but have a pending video countdown, cancel it
+                Log.d(TAG, "Cancelling video countdown")
+                isCountdownActive = false
+                currentCountdown = 0
+                cancelPhoto() // This handles the countdown cancellation logic
+                onRecordingStatusUpdate?.invoke("Recording cancelled")
+            }
+        } else {
+            // In photo mode, cancel any pending photo capture
+            cancelPhoto()
+        }
     }
 
     fun takePhoto(delaySeconds: Int = 0) {
+        Log.d(TAG, "takePhoto() called with delay: $delaySeconds, isCountdownActive: $isCountdownActive")
+        
         if (!isCameraInitialized || !isCameraActive) {
             Log.e(TAG, "Camera not initialized or not active")
             Toast.makeText(context, "Camera not ready. Restarting...", Toast.LENGTH_SHORT).show()
@@ -210,47 +244,58 @@ class MyCameraManager(
 
         // Cancel any existing countdown before starting a new one
         if (isCountdownActive) {
+            Log.d(TAG, "Cancelling existing countdown before starting new one")
             cancelPhoto()
         }
 
         if (delaySeconds > 0) {
+            Log.d(TAG, "Starting delayed photo capture")
             isCountdownActive = true
             currentCountdown = delaySeconds
-            // Disable camera swap button at start of countdown
             onCameraSwapEnabled?.invoke(false)
             
             scope.launch {
-                var remainingSeconds = delaySeconds
-                while (remainingSeconds > 0 && isCountdownActive) {
-                    // Update countdown display based on current camera
-                    updateCountdownDisplay(remainingSeconds)
-                    
-                    // Only flash if enabled and using back camera
-                    if (cameraState.shouldUseFlashForCountdown()) {
-                        if (remainingSeconds > 1) {
-                            // Regular countdown flash
-                            flashBriefly("normal", 0.2f)
-                        } else if (remainingSeconds == 1) {
-                            // Special signal when about to capture
-                            flashBriefly("final", 0.6f)
+                try {
+                    var remainingSeconds = delaySeconds
+                    while (remainingSeconds > 0) {
+                        if (!isCountdownActive) {
+                            Log.d(TAG, "Countdown cancelled, breaking loop")
+                            break
                         }
+                        
+                        Log.d(TAG, "Countdown: $remainingSeconds seconds remaining")
+                        updateCountdownDisplay(remainingSeconds)
+                        
+                        if (cameraState.shouldUseFlashForCountdown()) {
+                            if (remainingSeconds > 1) {
+                                flashBriefly("normal", 0.2f)
+                            } else if (remainingSeconds == 1) {
+                                flashBriefly("final", 0.6f)
+                            }
+                        }
+                        remainingSeconds--
+                        delay(1000)
                     }
-                    remainingSeconds--
-                    delay(1000) // Wait 1 second between countdown steps
+                    
+                    // Double check it wasn't cancelled during the last delay
+                    if (isCountdownActive) {
+                        Log.d(TAG, "Countdown completed, taking photo")
+                        updateCountdownDisplay(0)
+                        capturePhoto(imageCapture)
+                    } else {
+                        Log.d(TAG, "Countdown was cancelled, not taking photo")
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error during countdown", e)
+                } finally {
+                    Log.d(TAG, "Countdown finally block, cleaning up")
+                    isCountdownActive = false
+                    currentCountdown = 0
+                    onCameraSwapEnabled?.invoke(true)
                 }
-                
-                // Only take photo if countdown wasn't cancelled
-                if (isCountdownActive) {
-                    // Clear countdown display
-                    updateCountdownDisplay(0)
-                    capturePhoto(imageCapture)
-                }
-                isCountdownActive = false
-                currentCountdown = 0
-                // Re-enable camera swap button after countdown/photo
-                onCameraSwapEnabled?.invoke(true)
             }
         } else {
+            Log.d(TAG, "Taking immediate photo")
             capturePhoto(imageCapture)
         }
     }
@@ -265,6 +310,12 @@ class MyCameraManager(
     }
 
     private fun capturePhoto(imageCapture: ImageCapture) {
+        Log.d(TAG, "capturePhoto() called, isCountdownActive: $isCountdownActive")
+        if (!isCountdownActive) {
+            Log.d(TAG, "Photo capture cancelled - countdown not active")
+            return
+        }
+        
         try {
             // Create time stamped name and MediaStore entry
             val name = SimpleDateFormat(FILENAME_FORMAT, Locale.US)
@@ -403,6 +454,8 @@ class MyCameraManager(
     }
 
     fun startVideoRecording(delaySeconds: Int = 0) {
+        Log.d(TAG, "startVideoRecording() called with delay: $delaySeconds, isCountdownActive: $isCountdownActive")
+        
         if (!isCameraInitialized || !isCameraActive) {
             Log.e(TAG, "Camera not initialized or not active")
             Toast.makeText(context, "Camera not ready. Restarting...", Toast.LENGTH_SHORT).show()
@@ -416,41 +469,75 @@ class MyCameraManager(
             return
         }
 
+        // Cancel any existing countdown before starting a new one
+        if (isCountdownActive) {
+            Log.d(TAG, "Cancelling existing countdown before starting new one")
+            cancelPhoto()
+        }
+
+        // Set countdown active at the start of any video recording attempt
+        isCountdownActive = true
+        Log.d(TAG, "Setting isCountdownActive to true at start of video recording")
+
         if (delaySeconds > 0) {
-            isCountdownActive = true
+            Log.d(TAG, "Starting delayed video recording")
             currentCountdown = delaySeconds
             onCameraSwapEnabled?.invoke(false)
             
             scope.launch {
-                var remainingSeconds = delaySeconds
-                while (remainingSeconds > 0 && isCountdownActive) {
-                    updateCountdownDisplay(remainingSeconds)
-                    
-                    if (cameraState.shouldUseFlashForCountdown()) {
-                        if (remainingSeconds > 1) {
-                            flashBriefly("normal", 0.2f)
-                        } else if (remainingSeconds == 1) {
-                            flashBriefly("final", 0.6f)
+                try {
+                    var remainingSeconds = delaySeconds
+                    while (remainingSeconds > 0) {
+                        if (!isCountdownActive) {
+                            Log.d(TAG, "Video countdown cancelled, breaking loop")
+                            break
                         }
+                        
+                        Log.d(TAG, "Video countdown: $remainingSeconds seconds remaining")
+                        updateCountdownDisplay(remainingSeconds)
+                        
+                        if (cameraState.shouldUseFlashForCountdown()) {
+                            if (remainingSeconds > 1) {
+                                flashBriefly("normal", 0.2f)
+                            } else if (remainingSeconds == 1) {
+                                flashBriefly("final", 0.6f)
+                            }
+                        }
+                        remainingSeconds--
+                        delay(1000)
                     }
-                    remainingSeconds--
-                    delay(1000)
+                    
+                    // Double check it wasn't cancelled during the last delay
+                    if (isCountdownActive) {
+                        Log.d(TAG, "Video countdown completed, starting recording")
+                        updateCountdownDisplay(0)
+                        startRecording(videoCapture)
+                    } else {
+                        Log.d(TAG, "Video countdown was cancelled, not starting recording")
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error during video countdown", e)
+                } finally {
+                    Log.d(TAG, "Video countdown finally block, cleaning up")
+                    isCountdownActive = false
+                    currentCountdown = 0
+                    onCameraSwapEnabled?.invoke(true)
                 }
-                
-                if (isCountdownActive) {
-                    updateCountdownDisplay(0)
-                    startRecording(videoCapture)
-                }
-                isCountdownActive = false
-                currentCountdown = 0
-                onCameraSwapEnabled?.invoke(true)
             }
         } else {
+            Log.d(TAG, "Starting immediate video recording")
             startRecording(videoCapture)
         }
     }
 
     private fun startRecording(videoCapture: VideoCapture<Recorder>) {
+        Log.d(TAG, "startRecording() called, isCountdownActive: $isCountdownActive")
+        if (!isCountdownActive) {
+            Log.d(TAG, "Video recording cancelled - countdown not active")
+            onRecordingStatusUpdate?.invoke("Recording cancelled")
+            return
+        }
+
         try {
             Log.d(TAG, "Starting recording on cameraManager instance: ${System.identityHashCode(this)}")
             cameraState.startRecording()

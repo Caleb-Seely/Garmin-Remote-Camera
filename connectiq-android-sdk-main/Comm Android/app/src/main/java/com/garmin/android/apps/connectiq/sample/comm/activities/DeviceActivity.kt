@@ -173,6 +173,13 @@ class DeviceActivity : Activity(), LifecycleOwner {
                         runOnUiThread {
                             statusTextView.text = status
                             connectIQManager.sendMessage(status)
+                            // Update status to ready state after a short delay
+                            handler.postDelayed({
+                                updateStatusWithTimeout(
+                                    if (cameraManager.isVideoMode()) StatusMessages.VIDEO_MODE 
+                                    else StatusMessages.CAMERA_READY
+                                )
+                            }, UIConstants.STATUS_MESSAGE_TIMEOUT)
                         }
                     },
                     onCountdownUpdate = { seconds ->
@@ -194,6 +201,17 @@ class DeviceActivity : Activity(), LifecycleOwner {
                                 status == StatusMessages.RECORDING_STOPPED || 
                                 status == StatusMessages.RECORDING_CANCELLED) {
                                 connectIQManager.sendMessage(status)
+                                
+                                // Update status to ready state after recording stops
+                                if (status == StatusMessages.RECORDING_STOPPED || 
+                                    status == StatusMessages.RECORDING_CANCELLED) {
+                                    handler.postDelayed({
+                                        updateStatusWithTimeout(
+                                            if (cameraManager.isVideoMode()) StatusMessages.VIDEO_MODE 
+                                            else StatusMessages.CAMERA_READY
+                                        )
+                                    }, UIConstants.STATUS_MESSAGE_TIMEOUT)
+                                }
                             }
                         }
                     }
@@ -222,16 +240,12 @@ class DeviceActivity : Activity(), LifecycleOwner {
                 onPhotoRequest = { delaySeconds ->
                     when {
                         delaySeconds == -1 -> {
-                            // Cancel request received or stop recording
-                            if (cameraManager.isRecording()) {
-                                cameraManager.stopVideoRecording()
-                                statusTextView.text = StatusMessages.RECORDING_STOPPED
-                                countdownTextView.text = ""
-                                countdownTextView.visibility = View.GONE
-                            } else {
-                                cameraManager.cancelPhoto()
-                                statusTextView.text = StatusMessages.RECORDING_CANCELLED
-                            }
+                            // Cancel request received
+                            Log.d(TAG, "Cancel request received")
+                            cameraManager.cancelCapture() // Use new cancelCapture method
+                            statusTextView.text = StatusMessages.RECORDING_CANCELLED
+                            countdownTextView.text = ""
+                            countdownTextView.visibility = View.GONE
                         }
                         delaySeconds == -2 -> {
                             // Immediate video command
@@ -464,7 +478,7 @@ class DeviceActivity : Activity(), LifecycleOwner {
         }, timeoutMs)
     }
 
-    private fun updateModeIndicator(isVideo: Boolean) {
+    fun updateModeIndicator(isVideo: Boolean) {
         val targetTranslationX = if (isVideo) videoButton.x - captureButton.x else 0f
         modeIndicator.animate()
             .translationX(targetTranslationX)

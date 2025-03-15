@@ -11,6 +11,7 @@ import com.garmin.android.connectiq.IQApp
 import com.garmin.android.connectiq.IQDevice
 import com.garmin.android.connectiq.exception.InvalidStateException
 import com.garmin.android.connectiq.exception.ServiceUnavailableException
+import com.garmin.android.apps.connectiq.sample.comm.activities.DeviceActivity
 
 class ConnectIQManager(
     private val context: Context,
@@ -66,11 +67,51 @@ class ConnectIQManager(
                         is String -> {
                             if (firstItem.equals("cancel", ignoreCase = true)) {
                                 delaySeconds = -1
+                                statusTextView.post {
+                                    statusTextView.text = "Cancelled request"
+                                }
+                                onPhotoRequest(-1)
+                                return@registerForAppEvents
                             } else if (firstItem.startsWith("swap", ignoreCase = true)) {
-                                isVideoCommand = true
                                 val delayStr = firstItem.substringAfter("SWAP", "").trim()
                                 delaySeconds = if (delayStr.isEmpty()) 0 else delayStr.toIntOrNull() ?: 0
                                 Log.d(TAG, "Swap command received with delay: $delaySeconds seconds")
+                                
+                                // Toggle camera mode
+                                if (cameraManager.isVideoMode()) {
+                                    // Currently in video mode, switch to photo mode
+                                    cameraManager.toggleVideoMode()
+                                    statusTextView.post {
+                                        statusTextView.text = "Switching to photo mode"
+                                    }
+                                    (context as? DeviceActivity)?.updateModeIndicator(false)
+                                    
+                                    if (delaySeconds > 0) {
+                                        statusTextView.post {
+                                            statusTextView.text = "Taking photo in $delaySeconds seconds"
+                                        }
+                                        onPhotoRequest(delaySeconds)
+                                    } else {
+                                        onPhotoRequest(0)
+                                    }
+                                } else {
+                                    // Currently in photo mode, switch to video mode
+                                    cameraManager.toggleVideoMode()
+                                    statusTextView.post {
+                                        statusTextView.text = "Switching to video mode"
+                                    }
+                                    (context as? DeviceActivity)?.updateModeIndicator(true)
+                                    
+                                    if (delaySeconds > 0) {
+                                        statusTextView.post {
+                                            statusTextView.text = "Starting recording in $delaySeconds seconds"
+                                        }
+                                        onPhotoRequest(-3 - delaySeconds)  // Convert to video delay format
+                                    } else {
+                                        onPhotoRequest(-2)  // Immediate video command
+                                    }
+                                }
+                                return@registerForAppEvents
                             } else {
                                 delaySeconds = firstItem.toIntOrNull() ?: 0
                             }
@@ -81,25 +122,25 @@ class ConnectIQManager(
                     }
                 }
 
+                // For non-swap messages, use the current mode to determine behavior
+                val isCurrentlyVideoMode = cameraManager.isVideoMode()
+                
                 statusTextView.post {
                     statusTextView.text = when {
-                        isVideoCommand -> {
-                            if (delaySeconds > 0) {
-                                "Starting video recording in $delaySeconds seconds"
-                            } else {
-                                "Starting video recording"
-                            }
-                        }
-                        delaySeconds > 0 -> "Starting countdown: $delaySeconds seconds"
-                        delaySeconds == -1 -> "Cancelled photo request"
+                        delaySeconds == -1 -> "Cancelled request"
+                        isCurrentlyVideoMode && delaySeconds > 0 -> "Starting recording in $delaySeconds seconds"
+                        isCurrentlyVideoMode -> "Starting recording"
+                        delaySeconds > 0 -> "Taking photo in $delaySeconds seconds"
                         else -> "Taking photo..."
                     }
                 }
 
+                // Convert delay based on current mode
                 onPhotoRequest(when {
-                    isVideoCommand && delaySeconds == 0 -> -2
-                    isVideoCommand -> -3 - delaySeconds
-                    else -> delaySeconds
+                    delaySeconds == -1 -> -1  // Cancel command
+                    isCurrentlyVideoMode && delaySeconds == 0 -> -2  // Immediate video
+                    isCurrentlyVideoMode -> -3 - delaySeconds  // Delayed video
+                    else -> delaySeconds  // Photo (immediate or delayed)
                 })
             }
         } catch (e: InvalidStateException) {
