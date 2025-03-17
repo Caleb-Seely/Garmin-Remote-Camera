@@ -94,6 +94,8 @@
                     android:layout_height="48dp"
                     android:background="@android:color/transparent"
                     android:src="@drawable/ic_baseline_camera_24"
+                    android:scaleX="1.0"
+                    android:scaleY="1.0"
                     android:contentDescription="Capture Photo" />
 
                 <ImageButton
@@ -102,6 +104,8 @@
                     android:layout_height="48dp"
                     android:background="@android:color/transparent"
                     android:src="@drawable/ic_baseline_videocam_24"
+                    android:scaleX="1.0"
+                    android:scaleY="1.0"
                     android:contentDescription="Record Video" />
 
             </LinearLayout>

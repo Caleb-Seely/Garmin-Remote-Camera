@@ -1,44 +1,44 @@
 package com.garmin.android.apps.connectiq.sample.comm.camera
 
+//video
 import android.content.ContentValues
 import android.content.Context
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.provider.MediaStore
 import android.util.Log
 import android.widget.Toast
-import androidx.camera.core.*
+import androidx.camera.core.Camera
+import androidx.camera.core.CameraSelector
+import androidx.camera.core.ImageCapture
+import androidx.camera.core.ImageCaptureException
+import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
+import androidx.camera.video.MediaStoreOutputOptions
+import androidx.camera.video.Quality
+import androidx.camera.video.QualitySelector
+import androidx.camera.video.Recorder
+import androidx.camera.video.Recording
+import androidx.camera.video.VideoCapture
+import androidx.camera.video.VideoRecordEvent
 import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
+import com.google.common.util.concurrent.ListenableFuture
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
-import java.util.*
+import java.util.Locale
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
-import com.google.common.util.concurrent.ListenableFuture
-import android.graphics.ImageFormat
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
-import android.hardware.camera2.CameraCharacteristics
-import android.hardware.camera2.CameraManager
-import android.widget.TextView
-import android.view.View
-import android.os.Handler
-import android.os.Looper
-import kotlinx.coroutines.cancel
-
-//video
-import androidx.camera.video.VideoCapture
-import androidx.camera.video.Recorder
-import androidx.camera.video.Recording
-import androidx.camera.video.FileOutputOptions
-import androidx.camera.video.MediaStoreOutputOptions
-import androidx.camera.video.VideoRecordEvent
-import androidx.camera.video.QualitySelector
-import androidx.camera.video.Quality
+import kotlin.math.min
 
 
 private var scope = CoroutineScope(Dispatchers.Main)
@@ -55,9 +55,11 @@ class MyCameraManager(
     companion object {
         private const val TAG = "MyCameraManager"
         private const val FILENAME_FORMAT = "yyyy-MM-dd-HH-mm-ss-SSS"
+        private var instanceCount = 0
     }
 
     private var imageCapture: ImageCapture? = null
+    private var currentCountdownJob: Job? = null
     private var videoCapture: VideoCapture<Recorder>? = null
     private var camera: Camera? = null
     private lateinit var cameraExecutor: ExecutorService
@@ -71,17 +73,24 @@ class MyCameraManager(
     private val handler = Handler(Looper.getMainLooper())
     private var recordingStatusRunnable: Runnable? = null
     private var currentRecording: Recording? = null
+    private var isCaptureQueued = false
+    private var lastCancelTime = 0L
+    private val CAPTURE_LOCKOUT_MS = 1000 // Prevent new captures for 1 second after cancel
 
     init {
+        instanceCount++
+        Log.d(TAG, "MyCameraManager instance created. Total instances: $instanceCount")
         cameraExecutor = Executors.newSingleThreadExecutor()
     }
 
     fun startCamera() {
+        Log.d(TAG, "startCamera() called - Instance: ${System.identityHashCode(this)}")
         val cameraProviderFuture = ProcessCameraProvider.getInstance(context)
 
         cameraProviderFuture.addListener({
             try {
                 val cameraProvider: ProcessCameraProvider = cameraProviderFuture.get()
+                Log.d(TAG, "Camera provider obtained, binding camera - Instance: ${System.identityHashCode(this)}")
                 bindCamera(cameraProvider)
             } catch (exc: Exception) {
                 Log.e(TAG, "Camera initialization failed", exc)
@@ -93,6 +102,7 @@ class MyCameraManager(
 
     private fun bindCamera(cameraProvider: ProcessCameraProvider) {
         try {
+            Log.d(TAG, "bindCamera() started - Instance: ${System.identityHashCode(this)}")
             // Preview with high quality settings
             val preview = Preview.Builder()
                 .setTargetRotation(viewFinder.display.rotation)
@@ -148,7 +158,7 @@ class MyCameraManager(
 
             isCameraInitialized = true
             isCameraActive = true
-            Log.d(TAG, "Camera initialized and active with highest quality settings")
+            Log.d(TAG, "Camera initialized and active - Instance: ${System.identityHashCode(this)}")
 
             // Update countdown display after successful camera switch
             if (isCountdownActive) {
@@ -180,20 +190,40 @@ class MyCameraManager(
         }
     }
 
-    fun cancelPhoto() {
-        Log.d(TAG, "cancelPhoto() called")
-        // First, mark as cancelled
+    fun cancelCapture() {
+        Log.d(TAG, "cancelCapture() called - Instance: ${System.identityHashCode(this)}, isVideoMode: ${cameraState.isVideoMode}, isCountdownActive: $isCountdownActive")
+        
+        // Set cancel timestamp to prevent immediate recapture
+        lastCancelTime = System.currentTimeMillis()
+
+        // Cancel the specific countdown job immediately
+        currentCountdownJob?.cancel()
+        currentCountdownJob = null
+
+        // Remove all pending callbacks from the main handler
+        handler.removeCallbacksAndMessages(null)
+
+        // Reset all capture-related state
         isCountdownActive = false
+        isCaptureQueued = false
         currentCountdown = 0
         
-        // Clear UI
-        updateCountdownDisplay(0)
-        onCameraSwapEnabled?.invoke(true)
+        if (cameraState.isVideoMode) {
+            // If we're in video mode and recording, stop recording
+            if (isRecording()) {
+                Log.d(TAG, "Stopping video recording in cancelCapture")
+                stopVideoRecording()
+            }
+            onRecordingStatusUpdate?.invoke("Recording cancelled")
+        }
         
-        // Cancel all pending operations
-        handler.removeCallbacksAndMessages(null)
+        // Cancel all pending operations in the coroutine scope
         scope.cancel()
         scope = CoroutineScope(Dispatchers.Main)
+        
+        // Reset UI state
+        updateCountdownDisplay(0)
+        onCameraSwapEnabled?.invoke(true)
         
         // Turn off flash if it was on
         try {
@@ -202,101 +232,73 @@ class MyCameraManager(
         } catch (e: Exception) {
             Log.e(TAG, "Error turning off flash during cancel", e)
         }
-        Log.d(TAG, "cancelPhoto() completed")
-    }
-
-    // Add new method to handle both photo and video cancellation
-    fun cancelCapture() {
-        Log.d(TAG, "cancelCapture() called, isVideoMode: ${cameraState.isVideoMode}")
-        if (cameraState.isVideoMode) {
-            // If we're in video mode and recording, stop recording
-            if (isRecording()) {
-                stopVideoRecording()
-            } else {
-                // If we're not recording but have a pending video countdown, cancel it
-                Log.d(TAG, "Cancelling video countdown")
-                isCountdownActive = false
-                currentCountdown = 0
-                cancelPhoto() // This handles the countdown cancellation logic
-                onRecordingStatusUpdate?.invoke("Recording cancelled")
-            }
-        } else {
-            // In photo mode, cancel any pending photo capture
-            cancelPhoto()
-        }
+        
+        Log.d(TAG, "cancelCapture() completed - Instance: ${System.identityHashCode(this)}")
     }
 
     fun takePhoto(delaySeconds: Int = 0) {
-        Log.d(TAG, "takePhoto() called with delay: $delaySeconds, isCountdownActive: $isCountdownActive")
-        
-        if (!isCameraInitialized || !isCameraActive) {
-            Log.e(TAG, "Camera not initialized or not active")
-            Toast.makeText(context, "Camera not ready. Restarting...", Toast.LENGTH_SHORT).show()
-            startCamera()
+        Log.d(TAG, "takePhoto() called with delay: $delaySeconds, isCountdownActive: $isCountdownActive, isCaptureQueued: $isCaptureQueued")
+
+        // Check if we're in a lockout period after cancellation
+        val timeSinceLastCancel = System.currentTimeMillis() - lastCancelTime
+        if (timeSinceLastCancel < CAPTURE_LOCKOUT_MS) {
+            Log.d(TAG, "Ignoring takePhoto request during lockout period")
             return
         }
 
-        val imageCapture = imageCapture ?: run {
-            Log.e(TAG, "ImageCapture is null")
-            Toast.makeText(context, "Camera not configured properly", Toast.LENGTH_SHORT).show()
-            return
-        }
-
-        // Cancel any existing countdown before starting a new one
+        // If there's already a countdown active, don't start another one
         if (isCountdownActive) {
-            Log.d(TAG, "Cancelling existing countdown before starting new one")
-            cancelPhoto()
+            Log.d(TAG, "Countdown already active, ignoring takePhoto request")
+            return
         }
 
+        // Add stack trace logging
+        val stackTrace = Thread.currentThread().stackTrace
+        for (i in 1 until min(6.0, stackTrace.size.toDouble()).toInt()) {
+            Log.d(TAG, "Stack trace $i: ${stackTrace[i].className}.${stackTrace[i].methodName}")
+        }
+
+        // Set capture state
+        isCaptureQueued = true
+        isCountdownActive = true
+        currentCountdown = delaySeconds
+
+        // Start countdown if delay is specified
         if (delaySeconds > 0) {
-            Log.d(TAG, "Starting delayed photo capture")
-            isCountdownActive = true
-            currentCountdown = delaySeconds
-            onCameraSwapEnabled?.invoke(false)
-            
-            scope.launch {
-                try {
-                    var remainingSeconds = delaySeconds
-                    while (remainingSeconds > 0) {
-                        if (!isCountdownActive) {
-                            Log.d(TAG, "Countdown cancelled, breaking loop")
-                            break
-                        }
-                        
-                        Log.d(TAG, "Countdown: $remainingSeconds seconds remaining")
-                        updateCountdownDisplay(remainingSeconds)
-                        
-                        if (cameraState.shouldUseFlashForCountdown()) {
-                            if (remainingSeconds > 1) {
-                                flashBriefly("normal", 0.2f)
-                            } else if (remainingSeconds == 1) {
-                                flashBriefly("final", 0.6f)
-                            }
-                        }
-                        remainingSeconds--
-                        delay(1000)
+            startCountdown(delaySeconds)
+        } else {
+            // Take photo immediately if no delay
+            capturePhoto()
+        }
+    }
+
+    private fun startCountdown(seconds: Int) {
+        Log.d(TAG, "Starting countdown with $seconds seconds")
+        
+        // Cancel any existing countdown job
+        currentCountdownJob?.cancel()
+        
+        // Create new countdown job
+        currentCountdownJob = scope.launch {
+            try {
+                for (i in seconds downTo 0) {
+                    if (!isCountdownActive) {
+                        Log.d(TAG, "Countdown cancelled")
+                        break
                     }
                     
-                    // Double check it wasn't cancelled during the last delay
-                    if (isCountdownActive) {
-                        Log.d(TAG, "Countdown completed, taking photo")
-                        updateCountdownDisplay(0)
-                        capturePhoto(imageCapture)
-                    } else {
-                        Log.d(TAG, "Countdown was cancelled, not taking photo")
-                    }
-                } catch (e: Exception) {
-                    Log.e(TAG, "Error during countdown", e)
-                } finally {
-                    Log.d(TAG, "Countdown finally block, cleaning up")
-                    isCountdownActive = false
-                    currentCountdown = 0
-                    onCameraSwapEnabled?.invoke(true)
+                    currentCountdown = i
+                    updateCountdownDisplay(i)
+                    delay(1000)
                 }
+                
+                if (isCountdownActive) {
+                    Log.d(TAG, "Countdown completed, taking photo")
+                    capturePhoto()
+                }
+            } catch (e: CancellationException) {
+                Log.d(TAG, "Countdown job cancelled")
             }
-        } else {
-            Log.d(TAG, "Taking immediate photo")
-            capturePhoto(imageCapture)
         }
     }
 
@@ -309,10 +311,33 @@ class MyCameraManager(
         }
     }
 
-    private fun capturePhoto(imageCapture: ImageCapture) {
-        Log.d(TAG, "capturePhoto() called, isCountdownActive: $isCountdownActive")
+    private fun capturePhoto(imageCapture: ImageCapture? = this.imageCapture) {
+        Log.d(TAG, "capturePhoto() called - Instance: ${System.identityHashCode(this)}, isCountdownActive: $isCountdownActive, isCaptureQueued: $isCaptureQueued")
+        
+        // Check all capture state flags
+        if (!isCountdownActive || !isCaptureQueued) {
+            Log.d(TAG, "Photo capture cancelled - capture state invalid - Instance: ${System.identityHashCode(this)}")
+            isCaptureQueued = false
+            return
+        }
+
+        // Check for cancelled job
+        if (currentCountdownJob?.isCancelled == true) {
+            Log.d(TAG, "Photo capture cancelled - job was cancelled - Instance: ${System.identityHashCode(this)}")
+            isCaptureQueued = false
+            return
+        }
+        
+        // Double check cancellation status right before capture
         if (!isCountdownActive) {
-            Log.d(TAG, "Photo capture cancelled - countdown not active")
+            Log.d(TAG, "Photo capture cancelled - countdown not active - Instance: ${System.identityHashCode(this)}")
+            return
+        }
+
+        // Set a final check flag to ensure we don't proceed if cancelled during setup
+        val captureStartTime = System.currentTimeMillis()
+        if (!isCountdownActive) {
+            Log.d(TAG, "Photo capture cancelled during setup")
             return
         }
         
@@ -346,8 +371,9 @@ class MyCameraManager(
                 )
             }.build()
 
+            Log.d(TAG, "Taking picture - Instance: ${System.identityHashCode(this)}")
             // Take the picture with maximum quality
-            imageCapture.takePicture(
+            imageCapture?.takePicture(
                 outputOptions,
                 ContextCompat.getMainExecutor(context),
                 object : ImageCapture.OnImageSavedCallback {
@@ -355,7 +381,7 @@ class MyCameraManager(
                         photoCount++
                         val msg = "Photo captured successfully"
                         Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
-                        Log.d(TAG, "Photo capture succeeded: ${output.savedUri}")
+                        Log.d(TAG, "Photo capture succeeded: ${output.savedUri} - Instance: ${System.identityHashCode(this@MyCameraManager)}")
                         
                         // Update the IS_PENDING flag after successful save
                         output.savedUri?.let { uri ->
@@ -472,7 +498,7 @@ class MyCameraManager(
         // Cancel any existing countdown before starting a new one
         if (isCountdownActive) {
             Log.d(TAG, "Cancelling existing countdown before starting new one")
-            cancelPhoto()
+            cancelCapture()
         }
 
         // Set countdown active at the start of any video recording attempt
@@ -647,6 +673,7 @@ class MyCameraManager(
     }
 
     fun shutdown() {
+        Log.d(TAG, "Shutting down MyCameraManager instance")
         stopVideoRecording()
         cameraExecutor.shutdown()
         try {
@@ -656,6 +683,8 @@ class MyCameraManager(
         } catch (e: InterruptedException) {
             cameraExecutor.shutdownNow()
         }
+        instanceCount--
+        Log.d(TAG, "MyCameraManager instance shut down. Remaining instances: $instanceCount")
     }
 
     fun isActive() = isCameraActive

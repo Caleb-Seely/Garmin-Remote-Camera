@@ -37,7 +37,7 @@ class CommListener extends Communications.ConnectionListener {
         }
         
         AppState.page = 1;
-        AppState.showMessageTimeout = System.getTimer() + 2000;
+        AppState.showMessageTimeout = System.getTimer() + 1000;
         WatchUi.requestUpdate();
         System.println("Transmit Complete");
     }

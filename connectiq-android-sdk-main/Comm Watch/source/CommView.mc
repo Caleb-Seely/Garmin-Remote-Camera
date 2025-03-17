@@ -56,7 +56,7 @@ class CommView extends WatchUi.View {
                 AppState.isCountdownActive = false;
                 AppState.lastMessage = "Sending..";
                 AppState.page = 1;
-                AppState.showMessageTimeout = currentTime + 2000;
+                AppState.showMessageTimeout = currentTime + 1000;
                 needsUpdate = true;
             } else {
                 // Update every half second during countdown

@@ -134,6 +134,7 @@ class DeviceActivity : Activity(), LifecycleOwner {
     private var countdownSeconds = 0
     private var isCameraOpen = false
     private var pendingPhotoDelay: Int? = null
+    private var isCountdownCancelled = false  // Add flag to track cancellation
 
     private lateinit var viewFinder: PreviewView
     private var imageCapture: ImageCapture? = null
@@ -242,7 +243,8 @@ class DeviceActivity : Activity(), LifecycleOwner {
                         delaySeconds == -1 -> {
                             // Cancel request received
                             Log.d(TAG, "Cancel request received")
-                            cameraManager.cancelCapture() // Use new cancelCapture method
+                            isCountdownCancelled = true
+                            cameraManager.cancelCapture()
                             statusTextView.text = StatusMessages.RECORDING_CANCELLED
                             countdownTextView.text = ""
                             countdownTextView.visibility = View.GONE
@@ -319,6 +321,7 @@ class DeviceActivity : Activity(), LifecycleOwner {
         countdownRunnable?.let { handler.removeCallbacks(it) }
         window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         cameraManager.shutdown()
+        cameraManager.cancelCapture()
     }
 
     override fun onResume() {
@@ -394,6 +397,7 @@ class DeviceActivity : Activity(), LifecycleOwner {
                 updateStatusWithTimeout(StatusMessages.PHOTO_MODE)
             } else {
                 // Take photo
+
                 cameraManager.takePhoto()
             }
         }
@@ -437,6 +441,9 @@ class DeviceActivity : Activity(), LifecycleOwner {
     }
 
     private fun startCountdown(seconds: Int) {
+        // Reset cancel flag
+        isCountdownCancelled = false
+        
         // Clear any existing countdown
         countdownRunnable?.let { handler.removeCallbacks(it) }
         
@@ -450,13 +457,15 @@ class DeviceActivity : Activity(), LifecycleOwner {
         
         countdownRunnable = object : Runnable {
             override fun run() {
-                if (countdownSeconds > 0) {
+                if (countdownSeconds > 0 && !isCountdownCancelled) {
                     countdownSeconds--
                     countdownTextView.text = countdownSeconds.toString()
                     handler.postDelayed(this, 1000)
                 } else {
                     countdownTextView.visibility = View.GONE
-                    cameraManager.takePhoto()
+                    if (!isCountdownCancelled) {
+                        cameraManager.takePhoto()
+                    }
                 }
             }
         }
@@ -495,6 +504,9 @@ class DeviceActivity : Activity(), LifecycleOwner {
     }
 
     private fun startVideoCountdown(seconds: Int) {
+        // Reset cancel flag
+        isCountdownCancelled = false
+        
         // Clear any existing countdown
         countdownRunnable?.let { handler.removeCallbacks(it) }
         
@@ -508,18 +520,20 @@ class DeviceActivity : Activity(), LifecycleOwner {
         
         countdownRunnable = object : Runnable {
             override fun run() {
-                if (countdownSeconds > 0) {
+                if (countdownSeconds > 0 && !isCountdownCancelled) {
                     countdownSeconds--
                     countdownTextView.text = countdownSeconds.toString()
                     handler.postDelayed(this, 1000)
                 } else {
                     countdownTextView.visibility = View.GONE
-                    // Ensure we're in video mode before starting recording
-                    if (!cameraManager.isVideoMode()) {
-                        cameraManager.toggleVideoMode()
-                        updateModeIndicator(true)
+                    if (!isCountdownCancelled) {
+                        // Ensure we're in video mode before starting recording
+                        if (!cameraManager.isVideoMode()) {
+                            cameraManager.toggleVideoMode()
+                            updateModeIndicator(true)
+                        }
+                        cameraManager.startVideoRecording()
                     }
-                    cameraManager.startVideoRecording()
                 }
             }
         }
