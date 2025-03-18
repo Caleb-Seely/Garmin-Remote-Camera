@@ -32,7 +32,7 @@ import java.util.Locale
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
-import kotlin.math.min
+import com.garmin.android.apps.connectiq.sample.comm.ui.StatusMessages
 
 
 private var scope = CoroutineScope(Dispatchers.Main)
@@ -60,7 +60,6 @@ class MyCameraManager(
     private var isCameraInitialized = false
     private var isCameraActive = false
     private var currentCameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
-    private var photoCount = 0
     private var isCountdownActive = false
     private var currentCountdown = 0
     private val cameraState = CameraState()
@@ -208,7 +207,7 @@ class MyCameraManager(
                 Log.d(TAG, "Stopping video recording in cancelCapture")
                 stopVideoRecording()
             }
-            onRecordingStatusUpdate?.invoke("Recording cancelled")
+
         }
         
         // Cancel all pending operations in the coroutine scope
@@ -356,7 +355,7 @@ class MyCameraManager(
                 }
 
                 override fun onImageSaved(output: ImageCapture.OutputFileResults) {
-                    val msg = "Photo capture succeeded"
+                    val msg = "Captured!"
                     Log.d(TAG, msg)
                     onPhotoTaken(msg)
                     resetCaptureState()
@@ -531,7 +530,7 @@ class MyCameraManager(
         Log.d(TAG, "startRecording() called, isCountdownActive: $isCountdownActive")
         if (!isCountdownActive) {
             Log.d(TAG, "Video recording cancelled - countdown not active")
-            onRecordingStatusUpdate?.invoke("Recording cancelled")
+            onRecordingStatusUpdate?.invoke(StatusMessages.RECORDING_CANCELLED)
             return
         }
 
@@ -564,7 +563,7 @@ class MyCameraManager(
                         is VideoRecordEvent.Start -> {
                             Log.d(TAG, "Received VideoRecordEvent.Start, recording state: ${cameraState.isRecording}")
                             startRecordingStatusUpdates()
-                            onRecordingStatusUpdate?.invoke("Recording started")
+                            onRecordingStatusUpdate?.invoke(StatusMessages.RECORDING_STARTED)
                         }
                         is VideoRecordEvent.Finalize -> {
                             Log.d(TAG, "Received VideoRecordEvent.Finalize, recording state: ${cameraState.isRecording}")
@@ -572,7 +571,7 @@ class MyCameraManager(
                                 Log.e(TAG, "Video capture failed: ${recordEvent.cause}")
                                 Toast.makeText(context, "Failed to record video: ${recordEvent.cause}", Toast.LENGTH_SHORT).show()
                             } else {
-                                onRecordingStatusUpdate?.invoke("Video saved successfully")
+                                onRecordingStatusUpdate?.invoke(StatusMessages.VIDEO_SAVED)
                             }
                             stopRecordingStatusUpdates()
                             currentRecording = null
@@ -595,7 +594,7 @@ class MyCameraManager(
             currentRecording?.stop()
             cameraState.stopRecording()
             stopRecordingStatusUpdates()
-            onRecordingStatusUpdate?.invoke("Recording stopped")
+            onRecordingStatusUpdate?.invoke(StatusMessages.RECORDING_STOPPED)
             
             // Turn off torch if it was on
             if (cameraState.isFlashEnabled && !cameraState.isFrontCamera) {

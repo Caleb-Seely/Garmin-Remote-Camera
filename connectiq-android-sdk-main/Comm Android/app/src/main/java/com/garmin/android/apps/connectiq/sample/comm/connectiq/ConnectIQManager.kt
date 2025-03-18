@@ -54,9 +54,10 @@ class ConnectIQManager(
                 // If recording is in progress, stop it regardless of the message
                 if (cameraManager.isRecording()) {
                     Log.d(TAG, "Recording in progress, stopping video")
-                    statusTextView.post {
-                        statusTextView.text = "Stopping recording"
-                    }
+                    //I don't think we need to update status text here
+//                    statusTextView.post {
+//                        statusTextView.text = "Stopping recording"
+//                    }
                     onPhotoRequest(-1) // Send cancellation command to stop recording
                     return@registerForAppEvents
                 }
@@ -168,7 +169,7 @@ class ConnectIQManager(
         try {
             connectIQ.sendMessage(device, myApp, message) { _, _, status ->
                 statusTextView.post {
-                    statusTextView.text = "Message sent: ${status.name}"
+                    Log.d(TAG, "Message sent: ${status.name}")
                 }
             }
         } catch (e: InvalidStateException) {

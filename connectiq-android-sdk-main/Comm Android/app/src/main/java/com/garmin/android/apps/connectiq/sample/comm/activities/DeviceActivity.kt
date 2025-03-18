@@ -5,55 +5,33 @@
 package com.garmin.android.apps.connectiq.sample.comm.activities
 
 import android.app.Activity
-import android.app.AlertDialog
-import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.os.Build
 import android.os.Bundle
-import android.os.Environment
 import android.os.Parcelable
-import android.provider.MediaStore
 import android.util.Log
 import android.view.View
 import android.widget.Button
 import android.widget.TextView
 import android.widget.Toast
-import androidx.annotation.RequiresApi
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.LifecycleRegistry
-import androidx.recyclerview.widget.LinearLayoutManager
-import androidx.recyclerview.widget.RecyclerView
-//import com.garmin.android.apps.connectiq.sample.comm.MessageFactory
 import com.garmin.android.apps.connectiq.sample.comm.R
-import com.garmin.android.apps.connectiq.sample.comm.adapter.MessagesAdapter
 import com.garmin.android.connectiq.ConnectIQ
 import com.garmin.android.connectiq.IQApp
 import com.garmin.android.connectiq.IQDevice
 import com.garmin.android.connectiq.exception.InvalidStateException
-import com.garmin.android.connectiq.exception.ServiceUnavailableException
-import java.io.File
-import java.text.SimpleDateFormat
-import java.util.*
-import android.content.pm.ResolveInfo
-import android.net.Uri
-import androidx.core.content.FileProvider
-import android.hardware.camera2.CameraManager
+
 import android.os.Handler
 import android.os.Looper
 import android.view.WindowManager
-import android.hardware.camera2.CameraCharacteristics
-import android.hardware.camera2.CameraAccessException
-import androidx.camera.core.*
-import androidx.camera.lifecycle.ProcessCameraProvider
+
 import androidx.camera.view.PreviewView
-import java.util.concurrent.ExecutorService
-import java.util.concurrent.Executors
-import java.util.concurrent.TimeUnit
+
 import com.garmin.android.apps.connectiq.sample.comm.camera.MyCameraManager
 import com.garmin.android.apps.connectiq.sample.comm.connectiq.ConnectIQManager
 import android.widget.ImageButton
@@ -75,14 +53,8 @@ class DeviceActivity : Activity(), LifecycleOwner {
         private const val TAG = "DeviceActivity"
         private const val EXTRA_IQ_DEVICE = "IQDevice"
         private const val COMM_WATCH_ID = "a3421feed289106a538cb9547ab12095"
-        private const val CAMERA_PERMISSION_REQUEST = 100
-        private const val STORAGE_PERMISSION_REQUEST = 101
-        private const val CAMERA_REQUEST_CODE = 102
-        private const val FILE_PROVIDER_AUTHORITY = "com.garmin.android.apps.connectiq.sample.comm.fileprovider"
-        private const val FLASH_DELAY = 1000L // 1 second between flash blinks
-        private const val STORE_APP_ID = ""
 
-        private const val FILENAME_FORMAT = "yyyy-MM-dd-HH-mm-ss-SSS"
+
         private const val REQUEST_CODE_PERMISSIONS = 10
         private val REQUIRED_PERMISSIONS = arrayOf(android.Manifest.permission.CAMERA)
 
@@ -93,7 +65,6 @@ class DeviceActivity : Activity(), LifecycleOwner {
         }
     }
 
-    private var deviceStatusView: TextView? = null
     private var openAppButtonView: ImageButton? = null
     private lateinit var statusTextView: TextView
     private lateinit var countdownTextView: TextView
@@ -109,41 +80,107 @@ class DeviceActivity : Activity(), LifecycleOwner {
     private lateinit var device: IQDevice
     private lateinit var myApp: IQApp
 
-    private var appIsOpen = false
+    private lateinit var cameraManager: MyCameraManager
+    private val handler = Handler(Looper.getMainLooper())
+    private var countdownRunnable: Runnable? = null
+    private var countdownSeconds = 0
+    private var isCountdownCancelled = false  // Add flag to track cancellation
 
-    private val openAppListener = ConnectIQ.IQOpenApplicationListener { _, _, status ->
+    private lateinit var viewFinder: PreviewView
+
+
+    private lateinit var connectIQManager: ConnectIQManager
+
+    private val onPhotoTaken = { status: String ->
         runOnUiThread {
-            Log.d(TAG, "App status changed: ${status.name}")
-        Toast.makeText(applicationContext, "App Status: " + status.name, Toast.LENGTH_SHORT).show()
+            statusTextView.text = StatusMessages.PHOTO_SAVED
+            connectIQManager.sendMessage(status)
+            // Update status to ready state after a short delay
+            handler.postDelayed({
+                updateStatusWithTimeout(
+                    if (cameraManager.isVideoMode()) StatusMessages.VIDEO_READY 
+                    else StatusMessages.CAMERA_READY
+                )
+            }, UIConstants.STATUS_MESSAGE_TIMEOUT)
+        }
+    }
 
-        if (status == ConnectIQ.IQOpenApplicationStatus.APP_IS_ALREADY_RUNNING) {
-            appIsOpen = true
-                openAppButtonView?.setImageResource(R.drawable.ic_baseline_send_24)
-        } else {
-            appIsOpen = false
-                openAppButtonView?.setImageResource(R.drawable.ic_baseline_send_24)
+    private val onRecordingStatusUpdate = { status: String ->
+        runOnUiThread {
+            when (status) {
+                StatusMessages.RECORDING_STARTED -> {
+                    startRecordingTimer()
+                    Log.d(TAG, "Recording started: $status")
+                    connectIQManager.sendMessage("Recording started")
+                }
+                StatusMessages.RECORDING_STOPPED -> {
+                    stopRecordingTimer()
+                    statusTextView.text = StatusMessages.RECORDING_STOPPED
+                    connectIQManager.sendMessage(StatusMessages.RECORDING_STOPPED)
+                    // Update status to ready state after recording stops
+                    handler.postDelayed({
+                        updateStatusWithTimeout(StatusMessages.VIDEO_READY)
+                    }, UIConstants.STATUS_MESSAGE_TIMEOUT)
+                }
+                StatusMessages.RECORDING_CANCELLED -> {
+                    stopRecordingTimer()
+                    statusTextView.text = StatusMessages.RECORDING_CANCELLED
+                    // Don't send any message for cancellation
+                    // Update status to ready state after recording stops
+                    handler.postDelayed({
+                        updateStatusWithTimeout(StatusMessages.VIDEO_READY)
+                    }, UIConstants.STATUS_MESSAGE_TIMEOUT)
+                }
+                else -> {
+                    statusTextView.text = status
+                }
             }
         }
     }
 
-    private var currentPhotoPath: String? = null
-    private lateinit var cameraManager: MyCameraManager
-    private var cameraId: String? = null
-    private val handler = Handler(Looper.getMainLooper())
-    private var countdownRunnable: Runnable? = null
-    private var countdownSeconds = 0
-    private var isCameraOpen = false
-    private var pendingPhotoDelay: Int? = null
-    private var isCountdownCancelled = false  // Add flag to track cancellation
+    private var recordingStartTime: Long = 0
+    private val recordingUpdateRunnable = object : Runnable {
+        override fun run() {
+            if (cameraManager.isRecording()) {
+                val elapsedSeconds = (System.currentTimeMillis() - recordingStartTime) / 1000
+                val minutes = elapsedSeconds / 60
+                val seconds = elapsedSeconds % 60
+                statusTextView.text = String.format("Recording: %02d:%02d", minutes, seconds)
+                handler.postDelayed(this, 1000)
+            }
+        }
+    }
 
-    private lateinit var viewFinder: PreviewView
-    private var imageCapture: ImageCapture? = null
-    private var camera: Camera? = null
-    private lateinit var cameraExecutor: ExecutorService
-    private var isCameraInitialized = false
-    private var isCameraActive = false
+    private fun startRecordingTimer() {
+        recordingStartTime = System.currentTimeMillis()
+        handler.post(recordingUpdateRunnable)
+    }
 
-    private lateinit var connectIQManager: ConnectIQManager
+    private fun stopRecordingTimer() {
+        handler.removeCallbacks(recordingUpdateRunnable)
+    }
+
+    private fun updateStatusWithTimeout(message: String, timeoutMs: Long = UIConstants.STATUS_MESSAGE_TIMEOUT) {
+        // Don't update status if we're showing a countdown or recording
+        if (countdownTextView.visibility == View.VISIBLE || cameraManager.isRecording()) {
+            return
+        }
+        
+        statusTextView.text = message
+        handler.removeCallbacksAndMessages(null)
+        
+        // Only set up auto-reset for temporary messages
+        if (message != StatusMessages.CAMERA_READY && message != StatusMessages.VIDEO_READY) {
+            handler.postDelayed({
+                if (!isFinishing) {
+                    statusTextView.text = if (cameraManager.isVideoMode()) 
+                        StatusMessages.VIDEO_READY 
+                    else 
+                        StatusMessages.CAMERA_READY
+                }
+            }, timeoutMs)
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -170,19 +207,7 @@ class DeviceActivity : Activity(), LifecycleOwner {
                     this,
                     this,
                     viewFinder,
-                    onPhotoTaken = { status ->
-                        runOnUiThread {
-                            statusTextView.text = status
-                            connectIQManager.sendMessage(status)
-                            // Update status to ready state after a short delay
-                            handler.postDelayed({
-                                updateStatusWithTimeout(
-                                    if (cameraManager.isVideoMode()) StatusMessages.VIDEO_MODE 
-                                    else StatusMessages.CAMERA_READY
-                                )
-                            }, UIConstants.STATUS_MESSAGE_TIMEOUT)
-                        }
-                    },
+                    onPhotoTaken = onPhotoTaken,
                     onCountdownUpdate = { seconds ->
                         runOnUiThread {
                             countdownTextView.text = if (seconds > 0) seconds.toString() else ""
@@ -194,28 +219,7 @@ class DeviceActivity : Activity(), LifecycleOwner {
                             cameraFlipButton.visibility = if (enabled) View.VISIBLE else View.GONE
                         }
                     },
-                    onRecordingStatusUpdate = { status ->
-                        runOnUiThread {
-                            statusTextView.text = status
-                            // Only send messages for significant state changes
-                            if (status == StatusMessages.RECORDING_STARTED || 
-                                status == StatusMessages.RECORDING_STOPPED || 
-                                status == StatusMessages.RECORDING_CANCELLED) {
-                                connectIQManager.sendMessage(status)
-                                
-                                // Update status to ready state after recording stops
-                                if (status == StatusMessages.RECORDING_STOPPED || 
-                                    status == StatusMessages.RECORDING_CANCELLED) {
-                                    handler.postDelayed({
-                                        updateStatusWithTimeout(
-                                            if (cameraManager.isVideoMode()) StatusMessages.VIDEO_MODE 
-                                            else StatusMessages.CAMERA_READY
-                                        )
-                                    }, UIConstants.STATUS_MESSAGE_TIMEOUT)
-                                }
-                            }
-                        }
-                    }
+                    onRecordingStatusUpdate = onRecordingStatusUpdate
                 )
 
                 // Set initial icons and states after camera manager is initialized
@@ -446,10 +450,7 @@ class DeviceActivity : Activity(), LifecycleOwner {
         
         // Clear any existing countdown
         countdownRunnable?.let { handler.removeCallbacks(it) }
-        
-        // Update status text
-        statusTextView.text = "Starting countdown"
-        
+
         // Start countdown
         countdownSeconds = seconds
         countdownTextView.visibility = View.VISIBLE
@@ -470,21 +471,6 @@ class DeviceActivity : Activity(), LifecycleOwner {
             }
         }
         handler.post(countdownRunnable!!)
-    }
-
-    private fun updateStatusWithTimeout(message: String, timeoutMs: Long = UIConstants.STATUS_MESSAGE_TIMEOUT) {
-        // Don't update status if we're showing a countdown
-        if (countdownTextView.visibility == View.VISIBLE) {
-            return
-        }
-        
-        statusTextView.text = message
-        handler.removeCallbacksAndMessages(null)
-        handler.postDelayed({
-            if (!isFinishing) {
-                statusTextView.text = StatusMessages.CAMERA_READY
-            }
-        }, timeoutMs)
     }
 
     fun updateModeIndicator(isVideo: Boolean) {

@@ -33,14 +33,14 @@
         android:id="@+id/status_text"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
+        android:layout_marginStart="8dp"
         android:layout_marginBottom="8dp"
         android:background="#80000000"
         android:padding="8dp"
-        android:text="Camera ready"
+        android:text="@string/camera_ready"
         android:textColor="@android:color/white"
         app:layout_constraintBottom_toTopOf="@id/bottom_control_bar"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintEnd_toEndOf="parent" />
+        app:layout_constraintStart_toStartOf="parent" />
 
     <LinearLayout
         android:id="@+id/bottom_control_bar"
@@ -62,13 +62,13 @@
             android:contentDescription="Toggle Flash" />
 
         <ImageButton
-            android:id="@+id/camera_flip_button"
+            android:id="@+id/send_test_msg_button"
             android:layout_width="48dp"
             android:layout_height="48dp"
-            android:layout_marginEnd="16dp"
             android:background="@android:color/transparent"
-            android:src="@drawable/ic_baseline_flip_camera_24"
-            android:contentDescription="Flip Camera" />
+            android:src="@drawable/ic_baseline_message_24"
+            android:contentDescription="Send Test Message" />
+
 
         <FrameLayout
             android:layout_width="wrap_content"
@@ -121,12 +121,14 @@
             android:contentDescription="Open App" />
 
         <ImageButton
-            android:id="@+id/send_test_msg_button"
+            android:id="@+id/camera_flip_button"
             android:layout_width="48dp"
             android:layout_height="48dp"
+            android:layout_marginEnd="16dp"
             android:background="@android:color/transparent"
-            android:src="@drawable/ic_baseline_message_24"
-            android:contentDescription="Send Test Message" />
+            android:src="@drawable/ic_baseline_flip_camera_24"
+            android:contentDescription="Flip Camera" />
+
 
     </LinearLayout>
 

@@ -5,7 +5,7 @@
 -->
 <resources>
 
-    <string name="app_name">Garmin Cam</string>
+    <string name="app_name">ClearShot</string>
 
     <string name="camera_ready">Camera ready</string>
     <string name="tap_to_send">Test Msg</string>
