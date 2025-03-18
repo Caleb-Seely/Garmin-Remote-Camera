@@ -239,6 +239,12 @@ class MyCameraManager(
     fun takePhoto(delaySeconds: Int = 0) {
         Log.d(TAG, "takePhoto() called with delay: $delaySeconds, isCountdownActive: $isCountdownActive, isCaptureQueued: $isCaptureQueued")
 
+        // First, check if we need to reset any stale state
+        if (isCountdownActive && !isCaptureQueued) {
+            Log.d(TAG, "Resetting stale countdown state")
+            resetCaptureState()
+        }
+
         // Check if we're in a lockout period after cancellation
         val timeSinceLastCancel = System.currentTimeMillis() - lastCancelTime
         if (timeSinceLastCancel < CAPTURE_LOCKOUT_MS) {
@@ -246,21 +252,15 @@ class MyCameraManager(
             return
         }
 
-        // If there's already a countdown active, don't start another one
-        if (isCountdownActive) {
+        // If there's already a valid countdown active, don't start another one
+        if (isCountdownActive && isCaptureQueued) {
             Log.d(TAG, "Countdown already active, ignoring takePhoto request")
             return
         }
 
-        // Add stack trace logging
-        val stackTrace = Thread.currentThread().stackTrace
-        for (i in 1 until min(6.0, stackTrace.size.toDouble()).toInt()) {
-            Log.d(TAG, "Stack trace $i: ${stackTrace[i].className}.${stackTrace[i].methodName}")
-        }
-
         // Set capture state
         isCaptureQueued = true
-        isCountdownActive = true
+        isCountdownActive = delaySeconds > 0  // Only set countdown active if there's a delay
         currentCountdown = delaySeconds
 
         // Start countdown if delay is specified
@@ -281,9 +281,10 @@ class MyCameraManager(
         // Create new countdown job
         currentCountdownJob = scope.launch {
             try {
-                for (i in seconds downTo 0) {
-                    if (!isCountdownActive) {
+                for (i in seconds downTo 1) {  // Changed to stop at 1
+                    if (!isCountdownActive || !isCaptureQueued) {
                         Log.d(TAG, "Countdown cancelled")
+                        resetCaptureState()
                         break
                     }
                     
@@ -292,12 +293,17 @@ class MyCameraManager(
                     delay(1000)
                 }
                 
-                if (isCountdownActive) {
+                // Final second handling
+                if (isCountdownActive && isCaptureQueued) {
+                    updateCountdownDisplay(0)
                     Log.d(TAG, "Countdown completed, taking photo")
                     capturePhoto()
+                } else {
+                    resetCaptureState()
                 }
             } catch (e: CancellationException) {
                 Log.d(TAG, "Countdown job cancelled")
+                resetCaptureState()
             }
         }
     }
@@ -311,98 +317,69 @@ class MyCameraManager(
         }
     }
 
-    private fun capturePhoto(imageCapture: ImageCapture? = this.imageCapture) {
+    private fun capturePhoto() {
         Log.d(TAG, "capturePhoto() called - Instance: ${System.identityHashCode(this)}, isCountdownActive: $isCountdownActive, isCaptureQueued: $isCaptureQueued")
         
-        // Check all capture state flags
-        if (!isCountdownActive || !isCaptureQueued) {
-            Log.d(TAG, "Photo capture cancelled - capture state invalid - Instance: ${System.identityHashCode(this)}")
-            isCaptureQueued = false
+        if (!isCaptureQueued) {
+            Log.d(TAG, "Photo capture cancelled - not queued - Instance: ${System.identityHashCode(this)}")
+            resetCaptureState()
             return
         }
 
-        // Check for cancelled job
-        if (currentCountdownJob?.isCancelled == true) {
-            Log.d(TAG, "Photo capture cancelled - job was cancelled - Instance: ${System.identityHashCode(this)}")
-            isCaptureQueued = false
-            return
-        }
-        
-        // Double check cancellation status right before capture
-        if (!isCountdownActive) {
-            Log.d(TAG, "Photo capture cancelled - countdown not active - Instance: ${System.identityHashCode(this)}")
+        val capture = imageCapture ?: run {
+            Log.e(TAG, "Photo capture failed - imageCapture is null")
+            resetCaptureState()
             return
         }
 
-        // Set a final check flag to ensure we don't proceed if cancelled during setup
-        val captureStartTime = System.currentTimeMillis()
-        if (!isCountdownActive) {
-            Log.d(TAG, "Photo capture cancelled during setup")
-            return
+        // Create output options object which contains file + metadata
+        val name = SimpleDateFormat(FILENAME_FORMAT, Locale.US)
+            .format(System.currentTimeMillis())
+        val contentValues = ContentValues().apply {
+            put(MediaStore.MediaColumns.DISPLAY_NAME, name)
+            put(MediaStore.MediaColumns.MIME_TYPE, "image/jpeg")
+            if (Build.VERSION.SDK_INT > Build.VERSION_CODES.P) {
+                put(MediaStore.Images.Media.RELATIVE_PATH, "DCIM/Camera")
+            }
         }
-        
-        try {
-            // Create time stamped name and MediaStore entry
-            val name = SimpleDateFormat(FILENAME_FORMAT, Locale.US)
-                .format(System.currentTimeMillis())
-            val contentValues = ContentValues().apply {
-                put(MediaStore.MediaColumns.DISPLAY_NAME, name)
-                put(MediaStore.MediaColumns.MIME_TYPE, "image/jpeg")
-                put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
-                put(MediaStore.Images.Media.WIDTH, 8000)  // Target max resolution
-                put(MediaStore.Images.Media.HEIGHT, 6000) // Will automatically adjust to available
-                if (Build.VERSION.SDK_INT > Build.VERSION_CODES.P) {
-                    put(MediaStore.Images.Media.RELATIVE_PATH, "DCIM/Camera")
-                    put(MediaStore.Images.Media.IS_PENDING, 1)
+
+        // Create output options object which contains file + metadata
+        val outputOptions = ImageCapture.OutputFileOptions
+            .Builder(context.contentResolver,
+                MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                contentValues)
+            .build()
+
+        // Set up image capture listener, which is triggered after photo has been taken
+        capture.takePicture(
+            outputOptions,
+            ContextCompat.getMainExecutor(context),
+            object : ImageCapture.OnImageSavedCallback {
+                override fun onError(exc: ImageCaptureException) {
+                    Log.e(TAG, "Photo capture failed: ${exc.message}", exc)
+                    onPhotoTaken("Photo capture failed: ${exc.message}")
+                    resetCaptureState()
+                }
+
+                override fun onImageSaved(output: ImageCapture.OutputFileResults) {
+                    val msg = "Photo capture succeeded"
+                    Log.d(TAG, msg)
+                    onPhotoTaken(msg)
+                    resetCaptureState()
+                    onCameraSwapEnabled?.invoke(true)
                 }
             }
+        )
+    }
 
-            // Create output options object which contains file + metadata
-            val outputOptions = ImageCapture.OutputFileOptions.Builder(
-                context.contentResolver,
-                MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
-                contentValues
-            ).apply {
-                setMetadata(
-                    ImageCapture.Metadata().apply {
-                        // Enable location if available
-                        isReversedHorizontal = currentCameraSelector == CameraSelector.DEFAULT_FRONT_CAMERA
-                    }
-                )
-            }.build()
-
-            Log.d(TAG, "Taking picture - Instance: ${System.identityHashCode(this)}")
-            // Take the picture with maximum quality
-            imageCapture?.takePicture(
-                outputOptions,
-                ContextCompat.getMainExecutor(context),
-                object : ImageCapture.OnImageSavedCallback {
-                    override fun onImageSaved(output: ImageCapture.OutputFileResults) {
-                        photoCount++
-                        val msg = "Photo captured successfully"
-                        Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
-                        Log.d(TAG, "Photo capture succeeded: ${output.savedUri} - Instance: ${System.identityHashCode(this@MyCameraManager)}")
-                        
-                        // Update the IS_PENDING flag after successful save
-                        output.savedUri?.let { uri ->
-                            contentValues.clear()
-                            contentValues.put(MediaStore.Images.Media.IS_PENDING, 0)
-                            context.contentResolver.update(uri, contentValues, null, null)
-                        }
-                        
-                        onPhotoTaken("Success!")
-                    }
-
-                    override fun onError(exc: ImageCaptureException) {
-                        Log.e(TAG, "Photo capture failed: ${exc.message}", exc)
-                        Toast.makeText(context, "Failed to capture photo: ${exc.message}", Toast.LENGTH_SHORT).show()
-                    }
-                }
-            )
-        } catch (e: Exception) {
-            Log.e(TAG, "Error preparing photo capture", e)
-            Toast.makeText(context, "Error preparing photo: ${e.message}", Toast.LENGTH_SHORT).show()
-        }
+    private fun resetCaptureState() {
+        Log.d(TAG, "Resetting capture state - was active: $isCountdownActive, was queued: $isCaptureQueued")
+        isCountdownActive = false
+        isCaptureQueued = false
+        currentCountdown = 0
+        currentCountdownJob?.cancel()
+        currentCountdownJob = null
+        updateCountdownDisplay(0)
     }
 
     fun toggleFlash() {
