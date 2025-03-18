@@ -15,13 +15,7 @@ import androidx.camera.core.ImageCapture
 import androidx.camera.core.ImageCaptureException
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
-import androidx.camera.video.MediaStoreOutputOptions
-import androidx.camera.video.Quality
-import androidx.camera.video.QualitySelector
-import androidx.camera.video.Recorder
-import androidx.camera.video.Recording
-import androidx.camera.video.VideoCapture
-import androidx.camera.video.VideoRecordEvent
+import androidx.camera.video.*
 import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
@@ -120,9 +114,9 @@ class MyCameraManager(
                 .setJpegQuality(100)
                 .build()
 
-            // VideoCapture with high quality settings
+            // VideoCapture with high quality settings and audio enabled
             val recorder = Recorder.Builder()
-                .setQualitySelector(QualitySelector.from(Quality.HIGHEST))
+                .setQualitySelector(QualitySelector.from(Quality.HIGHEST, FallbackStrategy.higherQualityOrLowerThan(Quality.SD)))
                 .build()
             videoCapture = VideoCapture.withOutput(recorder)
 
@@ -564,11 +558,7 @@ class MyCameraManager(
 
             currentRecording = videoCapture.output
                 .prepareRecording(context, mediaStoreOutputOptions)
-                .apply { 
-                    if (cameraState.isFlashEnabled && !cameraState.isFrontCamera) {
-                        camera?.cameraControl?.enableTorch(true)
-                    }
-                }
+                .withAudioEnabled()  // Enable audio recording
                 .start(ContextCompat.getMainExecutor(context)) { recordEvent ->
                     when(recordEvent) {
                         is VideoRecordEvent.Start -> {
