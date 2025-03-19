@@ -53,21 +53,21 @@
         app:layout_constraintBottom_toBottomOf="parent">
 
         <ImageButton
-            android:id="@+id/flash_toggle_button"
+            android:id="@+id/send_test_msg_button"
             android:layout_width="48dp"
             android:layout_height="48dp"
             android:layout_marginEnd="16dp"
             android:background="@android:color/transparent"
-            android:src="@drawable/ic_baseline_flash_off_24"
-            android:contentDescription="Toggle Flash" />
+            android:src="@drawable/ic_baseline_info_24"
+            android:contentDescription="Info" />
 
         <ImageButton
-            android:id="@+id/send_test_msg_button"
+            android:id="@+id/flash_toggle_button"
             android:layout_width="48dp"
             android:layout_height="48dp"
             android:background="@android:color/transparent"
-            android:src="@drawable/ic_baseline_message_24"
-            android:contentDescription="Send Test Message" />
+            android:src="@drawable/ic_baseline_flash_off_24"
+            android:contentDescription="Toggle Flash" />
 
 
         <FrameLayout
@@ -117,7 +117,7 @@
             android:layout_height="48dp"
             android:layout_marginEnd="16dp"
             android:background="@android:color/transparent"
-            android:src="@drawable/ic_baseline_send_24"
+            android:src="@drawable/watch_screentime_35dp"
             android:contentDescription="Open App" />
 
         <ImageButton
@@ -129,7 +129,10 @@
             android:src="@drawable/ic_baseline_flip_camera_24"
             android:contentDescription="Flip Camera" />
 
-
+        <ImageView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            app:srcCompat="@drawable/watch_screentime_40dp" />
     </LinearLayout>
 
     <TextView

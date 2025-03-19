@@ -479,6 +479,23 @@ class DeviceActivity : Activity(), LifecycleOwner {
             .translationX(targetTranslationX)
             .setDuration(UIConstants.MODE_SWITCH_ANIMATION_DURATION)
             .start()
+
+        updateButtonSizes(isVideo) 
+    }
+
+   private fun updateButtonSizes(isVideoMode: Boolean) {
+        val scale = if (isVideoMode) 1.4f else 1.0f
+        videoButton.animate()
+            .scaleX(scale)
+            .scaleY(scale)
+            .setDuration(200)
+            .start()
+        
+        captureButton.animate()
+            .scaleX(1.0f / scale)
+            .scaleY(1.0f / scale)
+            .setDuration(200)
+            .start()
     }
 
     private fun handleVideoButtonClick() {
