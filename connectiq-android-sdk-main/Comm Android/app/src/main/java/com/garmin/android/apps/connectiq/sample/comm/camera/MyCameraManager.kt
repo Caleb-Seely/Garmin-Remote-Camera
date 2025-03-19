@@ -640,7 +640,9 @@ class MyCameraManager(
 
     fun shutdown() {
         Log.d(TAG, "Shutting down MyCameraManager instance")
-        stopVideoRecording()
+        if (isRecording()) {
+            stopVideoRecording()
+        }
         cameraExecutor.shutdown()
         try {
             if (!cameraExecutor.awaitTermination(800, TimeUnit.MILLISECONDS)) {

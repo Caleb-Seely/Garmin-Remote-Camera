@@ -123,8 +123,10 @@ class DeviceActivity : Activity(), LifecycleOwner {
                     }, UIConstants.STATUS_MESSAGE_TIMEOUT)
                 }
                 StatusMessages.RECORDING_CANCELLED -> {
+
+                    //I am not sure what the difference between stopped and cancelled is, should investigate, likely todo with the watch 
                     stopRecordingTimer()
-                    statusTextView.text = StatusMessages.RECORDING_CANCELLED
+                    statusTextView.text = StatusMessages.RECORDING_STOPPED
                     // Don't send any message for cancellation
                     // Update status to ready state after recording stops
                     handler.postDelayed({
@@ -230,6 +232,36 @@ class DeviceActivity : Activity(), LifecycleOwner {
                 videoButton.setImageResource(R.drawable.ic_baseline_videocam_24)
                 captureButton.setImageResource(R.drawable.ic_baseline_camera_24)
                 updateStatusWithTimeout(StatusMessages.CAMERA_READY)
+
+                // Initialize camera with permission check
+                if (allPermissionsGranted()) {
+                    try {
+                        // Add a small delay before starting camera to ensure view is ready
+                        handler.postDelayed({
+                            try {
+                                cameraManager.startCamera()
+                            } catch (e: Exception) {
+                                Log.e(TAG, "Failed to start camera after delay", e)
+                                // Try flipping camera as a fallback
+                                try {
+                                    cameraManager.flipCamera()
+                                } catch (e2: Exception) {
+                                    Log.e(TAG, "Failed to flip camera as fallback", e2)
+                                    Toast.makeText(this, "Camera initialization failed", Toast.LENGTH_LONG).show()
+                                    finish()
+                                }
+                            }
+                        }, 100)
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Failed to start camera", e)
+                        Toast.makeText(this, "Failed to start camera: ${e.message}", Toast.LENGTH_LONG).show()
+                        finish()
+                    }
+                } else {
+                    ActivityCompat.requestPermissions(
+                        this, REQUIRED_PERMISSIONS, REQUEST_CODE_PERMISSIONS
+                    )
+                }
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to initialize camera manager", e)
                 Toast.makeText(this, "Camera initialization failed: ${e.message}", Toast.LENGTH_LONG).show()
@@ -295,21 +327,6 @@ class DeviceActivity : Activity(), LifecycleOwner {
 
             setupClickListeners()
 
-            // Initialize camera with permission check
-            if (allPermissionsGranted()) {
-                try {
-                    cameraManager.startCamera()
-                } catch (e: Exception) {
-                    Log.e(TAG, "Failed to start camera", e)
-                    Toast.makeText(this, "Failed to start camera: ${e.message}", Toast.LENGTH_LONG).show()
-                    finish()
-                }
-            } else {
-                ActivityCompat.requestPermissions(
-                    this, REQUIRED_PERMISSIONS, REQUEST_CODE_PERMISSIONS
-                )
-            }
-
             // Keep screen on for countdown and recording
             window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
 
@@ -324,8 +341,10 @@ class DeviceActivity : Activity(), LifecycleOwner {
         super.onDestroy()
         countdownRunnable?.let { handler.removeCallbacks(it) }
         window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        if (cameraManager.isRecording()) {
+            cameraManager.cancelCapture()
+        }
         cameraManager.shutdown()
-        cameraManager.cancelCapture()
     }
 
     override fun onResume() {
@@ -333,16 +352,41 @@ class DeviceActivity : Activity(), LifecycleOwner {
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_RESUME)
         connectIQManager.registerForAppEvents()
         
-        if (!cameraManager.isActive()) {
-            cameraManager.startCamera()
-        }
+        // Add a small delay before restarting camera to ensure proper cleanup
+        handler.postDelayed({
+            if (!cameraManager.isActive()) {
+                try {
+                    cameraManager.startCamera()
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to restart camera in onResume", e)
+                    // Try flipping camera as a fallback
+                    try {
+                        cameraManager.flipCamera()
+                    } catch (e2: Exception) {
+                        Log.e(TAG, "Failed to flip camera as fallback", e2)
+                    }
+                }
+            }
+        }, 100) // Small delay to ensure proper cleanup
     }
 
     override fun onPause() {
         super.onPause()
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_PAUSE)
-        // Don't set isCameraActive to false here, let the lifecycle handle it
-        // This allows the preview to continue when returning from background
+        
+        // Ensure camera is properly stopped before pausing
+        try {
+            if (cameraManager.isActive()) {
+                // If we're recording, stop the recording first
+                if (cameraManager.isRecording()) {
+                    cameraManager.stopVideoRecording()
+                }
+                // Then shutdown the camera
+                cameraManager.shutdown()
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error stopping camera in onPause", e)
+        }
 
         try {
             connectIQ.unregisterForDeviceEvents(device)
@@ -426,7 +470,7 @@ class DeviceActivity : Activity(), LifecycleOwner {
 
         // Send test message button
         findViewById<View>(R.id.send_test_msg_button).setOnClickListener {
-            connectIQManager.sendMessage("Test Message")
+            finish()
         }
     }
 
