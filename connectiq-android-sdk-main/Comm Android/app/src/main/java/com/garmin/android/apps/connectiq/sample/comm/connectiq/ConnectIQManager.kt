@@ -48,6 +48,13 @@ class ConnectIQManager(
 
     fun registerForAppEvents() {
         try {
+            // Register for device status updates
+            connectIQ.registerForDeviceEvents(device) { device, status ->
+                Log.d(TAG, "Device status changed: ${status.name}")
+                // Update action bar title color based on connection status
+                (context as? DeviceActivity)?.updateActionBarTitle(status == IQDevice.IQDeviceStatus.CONNECTED)
+            }
+
             connectIQ.registerForAppEvents(device, myApp) { _, _, message, _ ->
                 Log.d(TAG, "New message received: ${message} camera-manager: ${cameraManager.isRecording()}")
 
@@ -186,7 +193,16 @@ class ConnectIQManager(
     fun unregisterForEvents() {
         try {
             connectIQ.unregisterForApplicationEvents(device, myApp)
+            connectIQ.unregisterForDeviceEvents(device)
         } catch (_: InvalidStateException) {
+        }
+    }
+
+    fun isDeviceConnected(): Boolean {
+        return try {
+            connectIQ.getDeviceStatus(device) == IQDevice.IQDeviceStatus.CONNECTED
+        } catch (e: Exception) {
+            false
         }
     }
 } 

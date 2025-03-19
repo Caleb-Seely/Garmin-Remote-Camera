@@ -38,6 +38,9 @@ import android.widget.ImageButton
 import com.garmin.android.apps.connectiq.sample.comm.ui.UIConstants
 import com.garmin.android.apps.connectiq.sample.comm.ui.StatusMessages
 
+import android.text.SpannableString
+import android.text.Spannable
+import android.text.style.ForegroundColorSpan
 
 // TODO Add a valid store app id.
 private const val STORE_APP_ID = ""
@@ -184,6 +187,28 @@ class DeviceActivity : Activity(), LifecycleOwner {
         }
     }
 
+fun updateActionBarTitle(isConnected: Boolean) {
+    val prefix = "ClearShot | "
+    val deviceName = device.friendlyName
+    val fullTitle = prefix + deviceName
+    
+    val spannableTitle = SpannableString(fullTitle)
+    val deviceNameColor = if (isConnected) 
+                        ContextCompat.getColor(this, android.R.color.holo_green_light)
+                     else 
+                        ContextCompat.getColor(this, android.R.color.holo_red_light)
+    
+    // Apply color span only to the device name portion
+    spannableTitle.setSpan(
+        ForegroundColorSpan(deviceNameColor), 
+        prefix.length,  // Start index (after "ClearShot | ")
+        fullTitle.length,  // End index (end of the string)
+        Spannable.SPAN_INCLUSIVE_INCLUSIVE
+    )
+    
+    actionBar?.title = spannableTitle
+}
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_device)
@@ -191,6 +216,9 @@ class DeviceActivity : Activity(), LifecycleOwner {
         try {
             device = intent.getParcelableExtra<Parcelable>(EXTRA_IQ_DEVICE) as IQDevice
             myApp = IQApp(COMM_WATCH_ID)
+
+            // Set initial action bar title
+            updateActionBarTitle(true)
 
             // Initialize views
             statusTextView = findViewById(R.id.status_text)
@@ -352,6 +380,9 @@ class DeviceActivity : Activity(), LifecycleOwner {
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_RESUME)
         connectIQManager.registerForAppEvents()
         
+        // Update action bar title color based on connection status
+        updateActionBarTitle(connectIQManager.isDeviceConnected())
+        
         // Add a small delay before restarting camera to ensure proper cleanup
         handler.postDelayed({
             if (!cameraManager.isActive()) {
@@ -373,6 +404,9 @@ class DeviceActivity : Activity(), LifecycleOwner {
     override fun onPause() {
         super.onPause()
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_PAUSE)
+        
+        // Update action bar title color based on connection status
+        updateActionBarTitle(connectIQManager.isDeviceConnected())
         
         // Ensure camera is properly stopped before pausing
         try {
