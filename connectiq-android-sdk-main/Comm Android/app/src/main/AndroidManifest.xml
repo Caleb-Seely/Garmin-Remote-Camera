@@ -47,6 +47,9 @@
 
         <activity android:name=".activities.DeviceActivity" />
 
+        <activity android:name=".activities.HelpActivity"
+            android:theme="@style/Theme.AppCompat.Light.DarkActionBar" />
+
     </application>
 
 </manifest>

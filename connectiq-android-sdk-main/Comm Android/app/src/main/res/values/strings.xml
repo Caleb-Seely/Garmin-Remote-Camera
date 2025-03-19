@@ -19,10 +19,33 @@
     <string name="open_app_already_open">The Comm app is already open on the device.</string>
     <string name="received_message">Received message from device.</string>
 
-
-
     <string name="missing_widget">Missing Remote Cam Widget</string>
     <string name="missing_widget_message">The Cam Widget used with this application is not installed on your ConnectIQ device.   Please install the widget and try again.</string>
 
+    <!-- Help Page Content -->
+    <string name="help">Help</string>
+    <string name="what_is_clearshot_title">What is ClearShot?</string>
+    <string name="what_is_clearshot_content">ClearShot is a powerful camera control app that allows you to remotely control your Android device\'s camera. Use this app to take photos, switch between front and back cameras, and record video—all from your Garmin watch.</string>
 
+    <string name="requirements_title">Requirements</string>
+    <string name="requirements_content">ClearShot requires the companion Garmin watch app to function. You can download the Garmin app from the Garmin IQ Store.</string>
+    <string name="requirements_note">Note: Due to Android system restrictions, it is not possible to programmatically trigger the native camera app. ClearShot uses its own camera functionality to capture photos and videos.</string>
+
+    <string name="watch_controls_title">Watch Controls</string>
+    <string name="button_layout_title">Button Layout</string>
+    <string name="button_layout_description">Below is a general button layout for watches with five buttons. While some models may have slight variations, the functionality will remain consistent with these principles:</string>
+
+    <string name="button_1_description">• Button 1: Backlight (device-specific, not part of the app)</string>
+    <string name="button_4_description">• Button 4: Back button (device-specific, not part of the app)</string>
+    <string name="button_5_description">• Button 5 (Action Button): Sends a request with the specified delay (default 0). This triggers the phone to:\n   - Capture a photo if in photo mode.\n   - Start recording if in video mode.\n   - Stop recording if a video is already in progress.</string>
+    <string name="button_2_description">• Button 2: Increases the delay time.</string>
+    <string name="button_3_description">• Button 3: Decreases the delay time.</string>
+    <string name="button_2_hold_description">• Hold Button 2: Switches between photo and video mode, then immediately sends an action command with the selected delay.\n   - Example: If the watch displays a 5-second delay and the phone is in camera mode, pressing the action button (Button 5) will capture a photo after 5 seconds. Holding Button 2 will instead start a video recording after the 5-second delay.</string>
+
+    <string name="watch_controls_image_description">Watch controls diagram</string>
+
+    <string name="additional_resources_title">Additional Resources</string>
+    <string name="github_repository_link">GitHub Repository</string>
+    <string name="personal_website_link">Personal Website</string>
+    <string name="support_note">For support or questions, feel free to reach out via the GitHub repository!</string>
 </resources>

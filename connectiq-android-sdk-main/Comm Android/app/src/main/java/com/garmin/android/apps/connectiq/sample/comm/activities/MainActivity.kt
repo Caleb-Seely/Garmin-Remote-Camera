@@ -5,6 +5,7 @@
 package com.garmin.android.apps.connectiq.sample.comm.activities
 
 import android.app.Activity
+import android.content.Intent
 import android.os.Bundle
 import android.view.Menu
 import android.view.MenuItem
@@ -108,6 +109,10 @@ class MainActivity : Activity() {
         return when (item.itemId) {
             R.id.load_devices -> {
                 loadDevices(tryAutoLaunch = false)
+                true
+            }
+            R.id.help -> {
+                startActivity(Intent(this, HelpActivity::class.java))
                 true
             }
             else -> super.onOptionsItemSelected(item)
