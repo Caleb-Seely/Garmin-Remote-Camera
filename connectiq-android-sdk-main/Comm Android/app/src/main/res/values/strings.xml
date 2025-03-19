@@ -40,12 +40,13 @@
     <string name="button_5_description">• Button 5 (Action Button): Sends a request with the specified delay (default 0). This triggers the phone to:\n   - Capture a photo if in photo mode.\n   - Start recording if in video mode.\n   - Stop recording if a video is already in progress.</string>
     <string name="button_2_description">• Button 2: Increases the delay time.</string>
     <string name="button_3_description">• Button 3: Decreases the delay time.</string>
-    <string name="button_2_hold_description">• Hold Button 2: Switches between photo and video mode, then immediately sends an action command with the selected delay.\n   - Example: If the watch displays a 5-second delay and the phone is in camera mode, pressing the action button (Button 5) will capture a photo after 5 seconds. Holding Button 2 will instead start a video recording after the 5-second delay.</string>
+    <string name="button_2_hold_description">• Hold Button 2: Switches between photo and video mode, then immediately sends an action command with the selected delay.</string>
+    <string name="button_2_hold_example">Example: If the watch displays a 5-second delay and the phone is in camera mode, pressing the action button (Button 5) will capture a photo after 5 seconds. Holding Button 2 will instead start a video recording after the 5-second delay.</string>
 
     <string name="watch_controls_image_description">Watch controls diagram</string>
 
     <string name="additional_resources_title">Additional Resources</string>
     <string name="github_repository_link">GitHub Repository</string>
-    <string name="personal_website_link">Personal Website</string>
+    <string name="personal_website_link">About the Developer</string>
     <string name="support_note">For support or questions, feel free to reach out via the GitHub repository!</string>
 </resources>

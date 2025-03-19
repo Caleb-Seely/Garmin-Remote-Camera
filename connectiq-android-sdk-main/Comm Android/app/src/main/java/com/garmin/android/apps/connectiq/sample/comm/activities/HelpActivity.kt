@@ -26,7 +26,7 @@ class HelpActivity : AppCompatActivity() {
     private fun setupResourceLinks() {
         // GitHub Repository link
         findViewById<TextView>(R.id.link_github).setOnClickListener {
-            openUrl("https://github.com/yourusername/clearshot")  // Replace with your actual GitHub repository URL
+            openUrl("https://github.com/Caleb-Seely/Garmin-Remote-Camera")  // Replace with your actual GitHub repository URL
         }
 
         // Personal Website link

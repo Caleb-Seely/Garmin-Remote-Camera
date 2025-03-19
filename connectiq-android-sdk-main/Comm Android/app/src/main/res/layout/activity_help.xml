@@ -2,11 +2,12 @@
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:padding="16dp">
+    android:scrollbars="none">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:padding="16dp"
         android:orientation="vertical">
 
         <!-- What is ClearShot Section -->
@@ -136,14 +137,30 @@
                 android:layout_marginBottom="2dp"/>
         </LinearLayout>
 
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/button_2_hold_example"
+            android:textStyle="italic"
+            android:textSize="16sp"
+            android:layout_marginBottom="8dp"/>
+
         <!-- Additional Resources Section -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/support_note"
+            android:textSize="16sp"
+            android:layout_marginBottom="12dp"/>
+
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="@string/additional_resources_title"
             android:textSize="20sp"
             android:textStyle="bold"
-            android:layout_marginBottom="4dp"/>
+            android:layout_marginBottom="0dp"/>
+
 
         <TextView
             android:id="@+id/link_github"
@@ -153,7 +170,8 @@
             android:textColor="@android:color/holo_blue_dark"
             android:padding="4dp"
             android:background="?android:attr/selectableItemBackground"
-            android:layout_marginBottom="4dp"/>
+            android:layout_marginBottom="0dp"/>
+
 
         <TextView
             android:id="@+id/link_website"
@@ -163,13 +181,7 @@
             android:textColor="@android:color/holo_blue_dark"
             android:padding="4dp"
             android:background="?android:attr/selectableItemBackground"
-            android:layout_marginBottom="4dp"/>
+            android:layout_marginBottom="8dp"/>
 
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="@string/support_note"
-            android:textSize="16sp"
-            android:layout_marginBottom="12dp"/>
     </LinearLayout>
 </ScrollView>
