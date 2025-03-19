@@ -6,69 +6,83 @@ using Toybox.Timer;
 class CommView extends WatchUi.View {
     var screenShape;
     var cameraIcon;
-    var stopwatchIcon;
+    var timeIcons = {}; // Dictionary to store time icons
     var timer;
     var lastUpdateTime = 0;
 
-    function initialize() {
-        View.initialize();
-        timer = new Timer.Timer();
-    }
+    // In CommView.mc
+   function initialize() {
+      View.initialize();
+      timer = new Timer.Timer();
+      System.println("CommView initialized");
+   }
 
-    function onLayout(dc) {
-        screenShape = System.getDeviceSettings().screenShape;
-        
-        // Load camera and stopwatch icon bitmaps
-        cameraIcon = WatchUi.loadResource(Rez.Drawables.CameraIcon);
-        stopwatchIcon = WatchUi.loadResource(Rez.Drawables.StopwatchIcon);
-        
-        // Start the timer with a slower update rate
-        if (timer != null) {
-            timer.stop();
-            timer.start(method(:onTimer), 500, true);
-        }
-    }
-    
-    function onTimer() {
-        var currentTime = System.getTimer();
-        
-        // Throttle updates to prevent overwhelming the system
-        if (currentTime - lastUpdateTime < 250) { // Minimum 250ms between updates
-            return;
-        }
-        
-        var needsUpdate = false;
-        
-        // Check if the message display should timeout
-        if (AppState.page == 1 && AppState.showMessageTimeout > 0) {
-            if (currentTime > AppState.showMessageTimeout) {
-                AppState.showMessageTimeout = 0;
-                AppState.page = 0;
-                needsUpdate = true;
-            }
-        }
-        
-        // If countdown is active, check if we need to update
-        if (AppState.isCountdownActive) {
-            var remaining = AppState.getRemainingTime();
-            if (remaining <= 0) {
-                // Countdown finished
-                AppState.isCountdownActive = false;
-                AppState.lastMessage = "Sending..";
-                AppState.page = 1;
-                AppState.showMessageTimeout = currentTime + 1000;
-                needsUpdate = true;
-            } else {
-                // Update every half second during countdown
-                needsUpdate = true;
-            }
-        }
-        
-        if (needsUpdate) {
-            lastUpdateTime = currentTime;
-            WatchUi.requestUpdate();
-        }
-    }
+   function onLayout(dc) {
+      screenShape = System.getDeviceSettings().screenShape;
+      
+      // Load camera icon
+      cameraIcon = WatchUi.loadResource(Rez.Drawables.CameraIcon);
+      
+      // Load time icons - use try/catch to handle missing resources
+      try {
+         timeIcons["0"] = WatchUi.loadResource(Rez.Drawables.time_0);
+         timeIcons["3"] = WatchUi.loadResource(Rez.Drawables.time_3);
+         timeIcons["5"] = WatchUi.loadResource(Rez.Drawables.time_5);
+         timeIcons["10"] = WatchUi.loadResource(Rez.Drawables.time_10);
+      } catch(ex) {
+         System.println("Error loading time icons: " + ex.getErrorMessage());
+      }
+      
+      // Start the timer with a faster update rate
+      if (timer != null) {
+         timer.stop();
+         timer.start(method(:onTimer), 200, true);
+         System.println("Timer started in onLayout");
+      }
+   }
+
+   function onTimer() {
+      // Always request an update when recording is active
+      if (AppState.isRecordingActive && AppState.page == 2) {
+         WatchUi.requestUpdate();
+         return;
+      }
+      
+      var currentTime = System.getTimer();
+      if (currentTime - lastUpdateTime < 250) {
+         return; // Skip other updates if too frequent
+      }
+      
+      var needsUpdate = false;
+      
+      // Check message timeout
+      if (AppState.page == 1 && AppState.showMessageTimeout > 0) {
+         if (currentTime > AppState.showMessageTimeout) {
+               AppState.showMessageTimeout = 0;
+               AppState.page = 0;
+               needsUpdate = true;
+         }
+      }
+      
+      // Check countdown
+      if (AppState.isCountdownActive) {
+         var remaining = AppState.getRemainingTime();
+         if (remaining <= 0) {
+               AppState.isCountdownActive = false;
+               AppState.lastMessage = "Sending..";
+               AppState.page = 1;
+               AppState.showMessageTimeout = currentTime + 1000;
+               needsUpdate = true;
+         } else {
+               needsUpdate = true;
+         }
+      }
+      
+      if (needsUpdate) {
+         lastUpdateTime = currentTime;
+         WatchUi.requestUpdate();
+      }
+   }
 
     function drawCountdownUI(dc) {
         var width = dc.getWidth();
@@ -90,26 +104,63 @@ class CommView extends WatchUi.View {
             if (timeStr != null && timeStr.length() > 0) {
                 dc.drawText(centerX, centerY, font, timeStr, 
                     Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
-                
-               //  // Draw "seconds" label
-               //  dc.setColor(Graphics.COLOR_LT_GRAY, Graphics.COLOR_TRANSPARENT);
-               //  var fontHeight = dc.getFontHeight(font);
-               //  dc.drawText(centerX, centerY + (fontHeight/2) + 5, 
-               //      Graphics.FONT_SMALL, "seconds", Graphics.TEXT_JUSTIFY_CENTER);
             }
         }
     }
+    
+    function drawRecordingUI(dc) {
+    var width = dc.getWidth();
+    var height = dc.getHeight();
+    var centerX = width / 2;
+    var centerY = height / 2;
+    
+    // Clear background
+    dc.setColor(Graphics.COLOR_BLACK, Graphics.COLOR_BLACK);
+    dc.clear();
+    
+    // Draw a red recording indicator
+    dc.setColor(Graphics.COLOR_RED, Graphics.COLOR_TRANSPARENT);
+    dc.fillCircle(width * 0.85, height * 0.15, 10);
+    
+    // Draw "REC" text
+    dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
+    dc.drawText(width * 0.75, height * 0.15 - 5, Graphics.FONT_TINY, "REC", 
+        Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
+    
+    // Get current time as a simple calculation to avoid function call errors
+    var timeStr = "00:00";
+    try {
+        if (AppState.isRecordingActive && AppState.recordingStartTime > 0) {
+            var currentTime = System.getTimer();
+            var elapsedSeconds = (currentTime - AppState.recordingStartTime) / 1000;
+            var minutes = (elapsedSeconds / 60).toNumber();
+            var seconds = (elapsedSeconds % 60).toNumber();
+            timeStr = minutes.format("%02d") + ":" + seconds.format("%02d");
+        }
+    } catch (ex) {
+        System.println("Time calculation error: " + ex.getErrorMessage());
+    }
+    
+    // Draw time elapsed
+    dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
+    dc.drawText(centerX, centerY, Graphics.FONT_NUMBER_MEDIUM, timeStr, 
+        Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
+    
+    // Draw instructions
+    dc.drawText(centerX, height * 0.75, Graphics.FONT_SMALL, "Press to stop", 
+        Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
+}
 
     function drawSimpleUI(dc) {
         var width = dc.getWidth();
         var height = dc.getHeight();
         var centerX = width / 2;
+        var centerY = height / 2;
         var paddingX = width * 0.1;
         var paddingY = width * 0.2;
-        // Group the stopwatch and time in the center of the screen
-        var stopwatchIconY = height * 0.60;  // Position stopwatch near the middle
-        var timeTextY = height * 0.75;       // Position time text below stopwatch
         
+        var stopwatchIconY = height * 0.70;  // Position stopwatch near the middle
+
         // Draw the camera icon in the top right corner
         if (cameraIcon != null) {
             var iconWidth = cameraIcon.getWidth();
@@ -127,21 +178,27 @@ class CommView extends WatchUi.View {
             dc.drawText(width - paddingX, paddingX, Graphics.FONT_MEDIUM, "CAMERA", Graphics.TEXT_JUSTIFY_RIGHT);
         }
         
-        // Draw the stopwatch icon in the center
-        if (stopwatchIcon != null) {
-            var iconWidth = stopwatchIcon.getWidth();
-            var iconHeight = stopwatchIcon.getHeight();
+        // Get the current selected time option
+        var currentTimeOption = AppState.timeOptions[AppState.selectedIndex];
+        
+        // Draw the selected time icon in the center
+        var timeIcon = null;
+        if (timeIcons.hasKey(currentTimeOption)) {
+            timeIcon = timeIcons[currentTimeOption];
+        }
+        
+        if (timeIcon != null) {
+            var iconWidth = timeIcon.getWidth();
+            var iconHeight = timeIcon.getHeight();
+            
+            // Center the icon
             dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
-            dc.drawBitmap(centerX - (iconWidth / 2), stopwatchIconY - (iconHeight / 2), stopwatchIcon);
+            dc.drawBitmap(centerX - (iconWidth / 2), stopwatchIconY - (iconHeight / 2), timeIcon);
         } else {
             // Fallback if icon isn't available
             dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
-            dc.drawText(centerX, stopwatchIconY, Graphics.FONT_MEDIUM, "TIMER", Graphics.TEXT_JUSTIFY_CENTER);
+            dc.drawText(centerX, centerY, Graphics.FONT_LARGE, currentTimeOption, Graphics.TEXT_JUSTIFY_CENTER);
         }
-        
-        // Draw the selected time option
-        dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
-        dc.drawText(centerX, timeTextY, Graphics.FONT_LARGE, AppState.timeOptions[AppState.selectedIndex], Graphics.TEXT_JUSTIFY_CENTER);
     }
 
     function drawMessage(dc) {
@@ -172,29 +229,51 @@ class CommView extends WatchUi.View {
     }
 
     function onUpdate(dc) {
-        // Check if countdown is active - this takes highest priority
-        if (AppState.isCountdownActive) {
-            drawCountdownUI(dc);
-            return;
-        }
-        
-        // Normal UI handling
-        dc.setColor(Graphics.COLOR_TRANSPARENT, Graphics.COLOR_BLACK);
-        dc.clear();
-        
-        if(AppState.hasDirectMessagingSupport) {
-            if(AppState.page == 0) {
-                drawSimpleUI(dc);
-            } else {
-                // First draw the UI in the background
-                drawSimpleUI(dc);
-                // Then overlay the message
-                drawMessage(dc);
+        try {
+            // Check if countdown is active - this takes highest priority
+            if (AppState.isCountdownActive) {
+                drawCountdownUI(dc);
+                return;
             }
-        } else {
+            
+            // Check if recording is active
+            if (AppState.isRecordingActive && AppState.page == 2) {
+                drawRecordingUI(dc);
+                return;
+            }
+            
+            // Normal UI handling
+            dc.setColor(Graphics.COLOR_TRANSPARENT, Graphics.COLOR_BLACK);
+            dc.clear();
+            
+            if(AppState.hasDirectMessagingSupport) {
+                if(AppState.page == 0) {
+                    drawSimpleUI(dc);
+                } else if(AppState.page == 1) {
+                    // First draw the UI in the background
+                    drawSimpleUI(dc);
+                    // Then overlay the message
+                    drawMessage(dc);
+                } else {
+                    // Fallback for unknown page state
+                    drawSimpleUI(dc);
+                }
+            } else {
+                dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
+                dc.drawText(dc.getWidth() / 2, dc.getHeight() / 3, Graphics.FONT_MEDIUM, 
+                    "Direct Messaging API\nNot Supported", Graphics.TEXT_JUSTIFY_CENTER);
+            }
+            
+        } catch (ex) {
+            // Catch any drawing errors to prevent crashes
+            System.println("Error in onUpdate: " + ex.getErrorMessage());
+            
+            // Fall back to a very simple screen
+            dc.setColor(Graphics.COLOR_BLACK, Graphics.COLOR_BLACK);
+            dc.clear();
             dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
-            dc.drawText(dc.getWidth() / 2, dc.getHeight() / 3, Graphics.FONT_MEDIUM, 
-                "Direct Messaging API\nNot Supported", Graphics.TEXT_JUSTIFY_CENTER);
+            dc.drawText(dc.getWidth()/2, dc.getHeight()/2, Graphics.FONT_MEDIUM, 
+                "Error", Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
         }
     }
 }

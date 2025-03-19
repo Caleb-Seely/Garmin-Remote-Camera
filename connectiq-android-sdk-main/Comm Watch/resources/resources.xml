@@ -2,6 +2,9 @@
     <bitmaps>
         <bitmap id="CameraIcon" filename="images/camera.png" />
         <bitmap id="StopwatchIcon" filename="images/time.png" />
-        
+        <bitmap id="time_0" filename="images/timer_0.png"/>
+        <bitmap id="time_3" filename="images/timer_3.png"/>
+        <bitmap id="time_5" filename="images/timer_5.png"/>
+        <bitmap id="time_10" filename="images/timer_10.png"/>
     </bitmaps>
 </resources>
