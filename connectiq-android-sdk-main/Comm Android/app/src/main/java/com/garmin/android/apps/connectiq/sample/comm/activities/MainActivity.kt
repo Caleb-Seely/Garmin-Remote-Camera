@@ -24,6 +24,7 @@ class MainActivity : Activity() {
     private lateinit var adapter: IQDeviceAdapter
 
     private var isSdkReady = false
+    private var autoLaunchAttempted = false  // Flag to track if we've already tried auto-launching
 
     private val connectIQListener: ConnectIQ.ConnectIQListener =
         object : ConnectIQ.ConnectIQListener {
@@ -33,8 +34,8 @@ class MainActivity : Activity() {
             }
 
             override fun onSdkReady() {
-                loadDevices()
                 isSdkReady = true
+                loadDevices(tryAutoLaunch = true)
             }
 
             override fun onSdkShutDown() {
@@ -53,7 +54,7 @@ class MainActivity : Activity() {
     public override fun onResume() {
         super.onResume()
         if (isSdkReady) {
-            loadDevices()
+            loadDevices(tryAutoLaunch = !autoLaunchAttempted)
         }
     }
 
@@ -98,7 +99,6 @@ class MainActivity : Activity() {
         connectIQ.initialize(this, true, connectIQListener)
     }
 
-
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
         menuInflater.inflate(R.menu.main, menu)
         return true
@@ -107,26 +107,39 @@ class MainActivity : Activity() {
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
         return when (item.itemId) {
             R.id.load_devices -> {
-                loadDevices()
+                loadDevices(tryAutoLaunch = false)
                 true
             }
             else -> super.onOptionsItemSelected(item)
         }
     }
 
-    fun loadDevices() {
+    fun loadDevices(tryAutoLaunch: Boolean = false) {
         try {
             // Retrieve the list of known devices.
             val devices = connectIQ.knownDevices ?: listOf()
-            // OR You can use getConnectedDevices to retrieve the list of connected devices only.
-            // val devices = connectIQ.connectedDevices ?: listOf()
 
             // Get the connectivity status for each device for initial state.
             devices.forEach {
                 it.status = connectIQ.getDeviceStatus(it)
             }
 
-            // Update ui list with the devices data
+            // Try to find the first connected device and launch its activity if requested
+            if (tryAutoLaunch) {
+                autoLaunchAttempted = true  // Mark that we've attempted auto-launch
+
+                val firstConnectedDevice = devices.find {
+                    it.status == IQDevice.IQDeviceStatus.CONNECTED
+                }
+
+                if (firstConnectedDevice != null) {
+                    // Launch the device activity for the first connected device
+                    startActivity(DeviceActivity.getIntent(this, firstConnectedDevice))
+                    return
+                }
+            }
+
+            // Update UI list with the devices data
             adapter.submitList(devices)
 
             // Let's register for device status updates.
