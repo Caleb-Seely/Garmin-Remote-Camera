@@ -11,7 +11,7 @@ class AppState {
     // Your existing properties
     static var page = 0;
     static var lastMessage = "";
-    static var strings = ["","","","",""];
+    static var strings = ["","","","",""];  // We'll clean this on startup
     static var stringsSize = 5;
     static var selectedIndex = 0;
     static var timeOptions = ["0", "10", "5", "3"];  // Matched to your SVG assets
@@ -35,6 +35,13 @@ class AppState {
     // New property for recording timer
     static var isRecordingActive = false;
     static var recordingStartTime = 0;
+    static var wasRecordingActive = false; // Flag to track if we just stopped recording
+    
+    // New property to track app start time
+    static var appStartTime = 0;
+    
+    // Flag to prevent processing messages at app start
+    static var ignoreMessagesOnStartup = true;
     
     // Start a countdown timer based on the selected time string (e.g. "10")
     static function startCountdown(timeString) {
@@ -57,58 +64,65 @@ class AppState {
         return false;
     }
     
+    // Clear history strings
+    static function clearMessageHistory() {
+        for (var i = 0; i < stringsSize; i++) {
+            strings[i] = "";
+        }
+        lastMessage = "";
+    }
+    
     // Start recording timer - simplified to avoid potential issues
-// In CommApp.mc, update startRecording
-static function startRecording() {
-    recordingStartTime = System.getTimer();
-    isRecordingActive = true;
-    isCountdownActive = false; // Ensure countdown is off
-    System.println("Recording started at " + recordingStartTime);
-    return true;
-}
+    static function startRecording() {
+        recordingStartTime = System.getTimer() ; 
+        isRecordingActive = true;
+        isCountdownActive = false; // Ensure countdown is off
+        System.println("Recording started at " + recordingStartTime);
+        return true;
+    }
     
     // Stop recording timer - simplified
     static function stopRecording() {
         isRecordingActive = false;
+        wasRecordingActive = true; // Set flag to indicate recording was active
         System.println("Recording stopped");
         return true;
     }
     
     // Get recording elapsed time in seconds - simplified
-// In CommApp.mc, update getRecordingElapsedTime with debugging
-static function getRecordingElapsedTime() {
-    if (!isRecordingActive) {
-        return 0;
-    }
-    
-    var currentTime = System.getTimer();
-    var elapsed = (currentTime - recordingStartTime) / 1000.0; // Convert to seconds
-    
-    // Add debug output
-    System.println("Recording time: current=" + currentTime + ", start=" + recordingStartTime + ", elapsed=" + elapsed);
-    
-    return elapsed;
-}
-    
-    // Format recording elapsed time as a string (mm:ss) - with error handling
-static function getFormattedRecordingTime() {
-    try {
-        var elapsed = getRecordingElapsedTime();
-        
-        if (elapsed < 0) {
-            elapsed = 0; // Safeguard against negative time
+    static function getRecordingElapsedTime() {
+        if (!isRecordingActive) {
+            return 0;
         }
         
-        // Use integer division instead of Math.floor
-        var minutes = (elapsed / 60).toNumber();
-        var seconds = (elapsed % 60).toNumber();
+        var currentTime = System.getTimer();
+        var elapsed = (currentTime - recordingStartTime) / 1000.0; // Convert to seconds
         
-        return minutes.format("%02d") + ":" + seconds.format("%02d");
-    } catch (ex) {
-        System.println("Error formatting recording time: " + ex.getErrorMessage());
-        return "00:00"; // Fallback on error
+        // Add debug output
+        System.println("Recording time: current=" + currentTime + ", start=" + recordingStartTime + ", elapsed=" + elapsed);
+        
+        return elapsed;
     }
-}
+    
+    // Format recording elapsed time as a string (mm:ss) - with error handling
+    static function getFormattedRecordingTime() {
+        try {
+            var elapsed = getRecordingElapsedTime();
+            
+            if (elapsed < 0) {
+                elapsed = 0; // Safeguard against negative time
+            }
+            
+            // Use integer division instead of Math.floor
+            var minutes = (elapsed / 60).toNumber();
+            var seconds = (elapsed % 60).toNumber();
+            
+            return minutes.format("%02d") + ":" + seconds.format("%02d");
+        } catch (ex) {
+            System.println("Error formatting recording time: " + ex.getErrorMessage());
+            return "00:00"; // Fallback on error
+        }
+    }
     
     // Get remaining time in seconds
     static function getRemainingTime() {
@@ -159,6 +173,12 @@ class CommExample extends Application.AppBase {
     function onPhoneHandler(msg) {
         var i;
 
+        // Skip processing messages if we're in startup mode
+        if (AppState.ignoreMessagesOnStartup) {
+            System.println("Ignoring message during app startup");
+            return true;
+        }
+
         if((AppState.crashOnMessage == true) && msg.data.equals("Hi")) {
             msg.length(); // Generates a symbol not found error in the VM
         }
@@ -197,7 +217,8 @@ class CommExample extends Application.AppBase {
             Attention.vibrate([new Attention.VibeProfile(50, 500)]); // 500ms vibration
         }
 
-        // Store in the history array
+        // Store in the history array - if we still want to keep this functionality
+        // If you don't need this history, you can remove or comment out this block
         for(i = (AppState.stringsSize - 1); i > 0; i -= 1) {
             AppState.strings[i] = AppState.strings[i-1];
         }
@@ -210,22 +231,43 @@ class CommExample extends Application.AppBase {
         return true;
     }
     
-// Helper function to switch to recording view after a delay
-function delayedSwitchToRecording() as Void {
-    if (AppState.isRecordingActive) {
-        AppState.page = 2; // Set to recording page
-        WatchUi.requestUpdate();
+    // Helper function to switch to recording view after a delay
+    function delayedSwitchToRecording() as Void {
+        if (AppState.isRecordingActive) {
+            AppState.page = 2; // Set to recording page
+            WatchUi.requestUpdate();
+        }
     }
-}
 
     // onStart() is called on application start up
     function onStart(state) {
-        // Don't show initial message when opening the app
+        // Clear message history when the app starts
+        AppState.clearMessageHistory();
+        
+        // Make sure we're on the main page
+        AppState.page = 0;
+        AppState.showMessageTimeout = 0;
+        
+        // Set flag to ignore messages during startup
+        AppState.ignoreMessagesOnStartup = true;
+        
+        // Create a timer to reset the ignore flag after a short delay
+        var startupTimer = new Timer.Timer();
+        startupTimer.start(method(:enableMessageProcessing), 2000, false);
+    }
+    
+    // Enable message processing after startup delay
+    function enableMessageProcessing() as Void {
+        AppState.ignoreMessagesOnStartup = false;
+        System.println("Message processing enabled");
     }
 
     // onStop() is called when your application is exiting
     function onStop(state) {
-        // Any cleanup code
+        // Clear message history when the app exits
+        // This is probably redundant given we also clear on start,
+        // but it ensures a clean state either way
+        AppState.clearMessageHistory();
     }
 
     // Return the initial view of your application here

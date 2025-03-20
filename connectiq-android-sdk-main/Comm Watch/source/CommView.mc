@@ -6,6 +6,7 @@ using Toybox.Timer;
 class CommView extends WatchUi.View {
     var screenShape;
     var cameraIcon;
+    var videoIcon;
     var timeIcons = {}; // Dictionary to store time icons
     var timer;
     var lastUpdateTime = 0;
@@ -22,6 +23,7 @@ class CommView extends WatchUi.View {
       
       // Load camera icon
       cameraIcon = WatchUi.loadResource(Rez.Drawables.CameraIcon);
+      videoIcon = WatchUi.loadResource(Rez.Drawables.VideoIcon);
       
       // Load time icons - use try/catch to handle missing resources
       try {
@@ -113,18 +115,33 @@ class CommView extends WatchUi.View {
     var height = dc.getHeight();
     var centerX = width / 2;
     var centerY = height / 2;
-    
+    var paddingX = width * 0.1;
+    var paddingY = width * 0.2;
+
     // Clear background
     dc.setColor(Graphics.COLOR_BLACK, Graphics.COLOR_BLACK);
     dc.clear();
     
-    // Draw a red recording indicator
-    dc.setColor(Graphics.COLOR_RED, Graphics.COLOR_TRANSPARENT);
-    dc.fillCircle(width * 0.85, height * 0.15, 10);
+        // Draw the camera icon in the top right corner
+        if (videoIcon != null) {
+            var iconWidth = videoIcon.getWidth();
+            var iconHeight = videoIcon.getHeight();
+            
+            // Add padding from the edges
+            var videoIconX = width - paddingX - (iconWidth / 2);
+            var videoIconY = paddingY + (iconHeight / 2);
+            
+            dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
+            dc.drawBitmap(videoIconX - (iconWidth / 2), videoIconY - (iconHeight / 2), videoIcon);
+        } else {
+            // Fallback if icon isn't available
+
+        }
+        
     
     // Draw "REC" text
     dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
-    dc.drawText(width * 0.75, height * 0.15 - 5, Graphics.FONT_TINY, "REC", 
+    dc.drawText(width * 0.7, height * 0.2 - 5, Graphics.FONT_TINY, "REC", 
         Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
     
     // Get current time as a simple calculation to avoid function call errors
@@ -159,8 +176,6 @@ class CommView extends WatchUi.View {
         var paddingX = width * 0.1;
         var paddingY = width * 0.2;
         
-        var stopwatchIconY = height * 0.70;  // Position stopwatch near the middle
-
         // Draw the camera icon in the top right corner
         if (cameraIcon != null) {
             var iconWidth = cameraIcon.getWidth();
@@ -175,7 +190,7 @@ class CommView extends WatchUi.View {
         } else {
             // Fallback if icon isn't available
             dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
-            dc.drawText(width - paddingX, paddingX, Graphics.FONT_MEDIUM, "CAMERA", Graphics.TEXT_JUSTIFY_RIGHT);
+            dc.drawText(width - paddingX, paddingX, Graphics.FONT_MEDIUM, "Capture", Graphics.TEXT_JUSTIFY_RIGHT);
         }
         
         // Get the current selected time option
@@ -193,7 +208,7 @@ class CommView extends WatchUi.View {
             
             // Center the icon
             dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
-            dc.drawBitmap(centerX - (iconWidth / 2), stopwatchIconY - (iconHeight / 2), timeIcon);
+            dc.drawBitmap(centerX - (iconWidth / 2), centerY - (iconHeight / 2), timeIcon);
         } else {
             // Fallback if icon isn't available
             dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
@@ -226,6 +241,7 @@ class CommView extends WatchUi.View {
                     font, 
                     AppState.lastMessage, 
                     Graphics.TEXT_JUSTIFY_CENTER);
+         AppState.lastMessage = "";    //Clear the last message to avoid is showing at the wrong time
     }
 
     function onUpdate(dc) {

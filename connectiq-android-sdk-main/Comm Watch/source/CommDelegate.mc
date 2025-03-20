@@ -28,6 +28,17 @@ class CommListener extends Communications.ConnectionListener {
             return;
         }
         
+        // Check if we're coming from a recording state - don't start countdown
+        if (AppState.isRecordingActive || AppState.wasRecordingActive) {
+            AppState.isCountdownActive = false; // Ensure countdown is disabled
+            AppState.wasRecordingActive = false; // Reset the flag
+            AppState.page = 1;
+            AppState.showMessageTimeout = System.getTimer() + 1000;
+            WatchUi.requestUpdate();
+            System.println("Recording Message Sent");
+            return;
+        }
+        
         // Normal timer start case
         var timeString = AppState.timeOptions[AppState.selectedIndex];
         if (timeString != "0" && AppState.startCountdown(timeString)) {
@@ -70,6 +81,7 @@ function safeTransmit(swap) {
         
         // If countdown is active, send cancel message
         if (AppState.isCountdownActive) {
+            AppState.isCountdownActive = false; // Ensure it's disabled immediately
             listener.wasCancelled = true;
             Communications.transmit("CANCEL", null, listener);
             System.println("Cancelling countdown");
@@ -79,6 +91,8 @@ function safeTransmit(swap) {
         // If recording is active, stop recording and send stop message
         if (AppState.isRecordingActive) {
             AppState.stopRecording();
+            AppState.isCountdownActive = false; // Explicitly disable countdown
+            AppState.wasRecordingActive = true; // Set the flag
             AppState.page = 0; // Return to main screen
             Communications.transmit("STOP", null, listener);
             System.println("Stopping recording");
@@ -146,6 +160,8 @@ class CommInputDelegate extends WatchUi.BehaviorDelegate {
                 // We're in recording mode, stop recording
                 AppState.stopRecording();
                 AppState.page = 0;
+                AppState.isCountdownActive = false;
+                AppState.wasRecordingActive = true; // Set the flag
                 Communications.transmit("STOP", null, new CommListener());
                 System.println("Stop Recording");
                 WatchUi.requestUpdate();
@@ -185,6 +201,8 @@ class CommInputDelegate extends WatchUi.BehaviorDelegate {
                 if (key == WatchUi.KEY_ENTER || key == WatchUi.KEY_ESC) {
                     AppState.stopRecording();
                     AppState.page = 0;
+                    AppState.isCountdownActive = false;
+                    AppState.wasRecordingActive = true; // Set the flag
                     Communications.transmit("STOP", null, new CommListener());
                     System.println("Stop Recording (Key)");
                     WatchUi.requestUpdate();
@@ -218,6 +236,8 @@ class CommInputDelegate extends WatchUi.BehaviorDelegate {
                 // Swipe stops recording
                 AppState.stopRecording();
                 AppState.page = 0;
+                AppState.isCountdownActive = false;
+                AppState.wasRecordingActive = true; // Set the flag
                 Communications.transmit("STOP", null, new CommListener());
                 System.println("Stop Recording (Swipe)");
                 WatchUi.requestUpdate();

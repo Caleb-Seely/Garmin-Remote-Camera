@@ -1,6 +1,7 @@
 <resources>
     <bitmaps>
-        <bitmap id="CameraIcon" filename="images/camera.png" />
+        <bitmap id="CameraIcon" filename="images/camera.svg" />
+        <bitmap id="VideoIcon" filename="images/video.svg"/>
         <bitmap id="StopwatchIcon" filename="images/time.png" />
         <bitmap id="time_0" filename="images/timer_0.png"/>
         <bitmap id="time_3" filename="images/timer_3.png"/>
