@@ -4,32 +4,75 @@ using Toybox.WatchUi;
 using Toybox.System;
 using Toybox.Communications;
 
-// Communication listener for transmit operations
+/**
+ * Communication listener for transmit operations
+ * Handles callback events from the Communications API
+ */
 class CommListener extends Communications.ConnectionListener {
     var wasCancelled = false;
 
+    /**
+     * Initialize the connection listener
+     */
     function initialize() {
         Communications.ConnectionListener.initialize();
         System.println("CommListener Init");
     }
 
-    function onComplete() {
+    /**
+     * Callback when transmission is complete
+     * Handles different scenarios based on current app state
+     */
+function onComplete() {
+    try {
+        // Reset transmission flag
         AppState.isTransmitting = false;
         AppState.lastTransmitTime = System.getTimer();
         
         // Handle cancel case
         if (wasCancelled) {
+            handleCancelComplete();
+            return;
+        }
+        
+        // For STOP commands (recording was active)
+        if (AppState.wasRecordingActive) {
+            handleStopRecordingComplete();
+            return;
+        }
+        
+        // For regular commands (not cancel, not recording)
+        handleStandardComplete();
+        return;
+    } catch (ex) {
+        System.println("Error in onComplete: " + ex.getErrorMessage());
+        // Recover to a safe state
+        safeResetToMainScreen();
+    }
+}
+    
+    /**
+     * Handle the cancel operation complete case
+     */
+    function handleCancelComplete() as Void {
+        try {
             AppState.isCountdownActive = false;
             AppState.lastMessage = "Cancelled";
             AppState.page = 1;
             AppState.showMessageTimeout = System.getTimer() + 2000;
             WatchUi.requestUpdate();
             System.println("Cancel Complete");
-            return;
+        } catch (ex) {
+            System.println("Error in handleCancelComplete: " + ex.getErrorMessage());
+            safeResetToMainScreen();
         }
-        
-        // For STOP commands (recording was active)
-        if (AppState.wasRecordingActive) {
+    }
+    
+    /**
+     * Handle the stop recording operation complete case
+     */
+    function handleStopRecordingComplete() as Void {
+        try {
             // Clear the flag immediately to prevent interference with other operations
             AppState.wasRecordingActive = false;
             
@@ -38,103 +81,121 @@ class CommListener extends Communications.ConnectionListener {
             AppState.showMessageTimeout = System.getTimer() + 2000;
             WatchUi.requestUpdate();
             System.println("Recording Stop Message Sent");
+        } catch (ex) {
+            System.println("Error in handleStopRecordingComplete: " + ex.getErrorMessage());
+            safeResetToMainScreen();
+        }
+    }
+    
+    /**
+     * Handle the standard operation complete case
+     * This includes normal photo capture with optional countdown
+     */
+    function handleStandardComplete() {
+        try {
+            var timeString = "0";
+            // Safely get the time string with bounds checking
+            if (AppState has :timeOptions && AppState has :selectedIndex && 
+                AppState.timeOptions != null && AppState.selectedIndex < AppState.timeOptions.size()) {
+                timeString = AppState.timeOptions[AppState.selectedIndex];
+            }
+            
+            var shouldCountdown = false;
+            // Parse time safely
+            try {
+                var timeValue = timeString.toNumber();
+                shouldCountdown = timeValue > 0;
+            } catch (ex) {
+                System.println("Error parsing time value: " + ex.getErrorMessage());
+                shouldCountdown = false;
+            }
+            
+            // For non-zero timer options, start countdown
+            if (shouldCountdown && !AppState.isRecordingActive) {
+                if (AppState has :startCountdown && AppState.startCountdown(timeString)) {
+                    System.println("Starting countdown for " + timeString + " seconds");
+                    // No need to set a message - the countdown UI will show
+                    WatchUi.requestUpdate();
+                    return;
+                }
+            }
+            
+            // Default case - just show a simple message
+            AppState.lastMessage = "Sending...";
+            AppState.page = 1;
+            AppState.showMessageTimeout = System.getTimer() + 1000;
+            WatchUi.requestUpdate();
+            System.println("Transmit Complete - No Countdown");
+
+            return;
+        } catch (ex) {
+            System.println("Error in handleStandardComplete: " + ex.getErrorMessage());
+            safeResetToMainScreen();
+
             return;
         }
-        
-        // For regular commands (not cancel, not recording)
-        var timeString = AppState.timeOptions[AppState.selectedIndex];
-        var shouldCountdown = timeString != "0" && timeString.toNumber() > 0;
-        
-        // For non-zero timer options, start countdown
-        if (shouldCountdown && !AppState.isRecordingActive) {
-            if (AppState.startCountdown(timeString)) {
-                System.println("Starting countdown for " + timeString + " seconds");
-                // No need to set a message - the countdown UI will show
-                WatchUi.requestUpdate();
-                return;
-            }
-        }
-        
-        // Default case - just show a simple message
-        AppState.lastMessage = "Sending...";
-        AppState.page = 1;
-        AppState.showMessageTimeout = System.getTimer() + 1000;
-        WatchUi.requestUpdate();
-        System.println("Transmit Complete - No Countdown");
     }
 
+    /**
+     * Callback when transmission encounters an error
+     */
     function onError() {
-        AppState.isTransmitting = false;
-        AppState.isCountdownActive = false;
-        AppState.lastMessage = "Send Failed!";
-        AppState.page = 1;
-        AppState.showMessageTimeout = System.getTimer() + 3000;
-        WatchUi.requestUpdate();
-        System.println("Transmit Failed");
+        try {
+            AppState.isTransmitting = false;
+            AppState.isCountdownActive = false;
+            AppState.lastMessage = "Send Failed!";
+            AppState.page = 1;
+            AppState.showMessageTimeout = System.getTimer() + 3000;
+            WatchUi.requestUpdate();
+            System.println("Transmit Failed");
+        } catch (ex) {
+            System.println("Error in onError handler: " + ex.getErrorMessage());
+            safeResetToMainScreen();
+        }
+    }
+    
+    /**
+     * Reset to main screen safely in case of errors
+     */
+    function safeResetToMainScreen() {
+        try {
+            // Clean up state
+            AppState.isTransmitting = false;
+            AppState.isCountdownActive = false;
+            AppState.wasRecordingActive = false;
+            
+            // Reset to main screen
+            AppState.page = 0;
+            WatchUi.requestUpdate();
+        } catch (ex) {
+            // Last resort error handling
+            System.println("Critical error in safeResetToMainScreen: " + ex.getErrorMessage());
+        }
     }
 }
 
-
-// Function to safely transmit data
+/**
+ * Function to safely transmit data to the phone
+ * Handles different states and sends appropriate commands
+ * @param swap If true, sends a SWAP command instead of standard capture
+ */
 function safeTransmit(swap) {
     try {
-        // Don't allow transmits during cooldown period
-        var currentTime = System.getTimer();
-        if (AppState.isTransmitting || 
-            (currentTime - AppState.lastTransmitTime < AppState.TRANSMIT_COOLDOWN)) {
-            System.println("Transmit blocked - cooldown or already transmitting");
+        // Check for cooldown period
+        if (isTransmissionBlocked()) {
             return;
         }
         
         AppState.isTransmitting = true;
         var listener = new CommListener();
         
-        // If countdown is active, send cancel message
+        // Different transmit paths based on app state
         if (AppState.isCountdownActive) {
-            AppState.isCountdownActive = false; // Ensure it's disabled immediately
-            listener.wasCancelled = true;
-            Communications.transmit("CANCEL", null, listener);
-            System.println("Cancelling countdown");
-            return;
-        }
-        
-        // If recording is active, stop recording and send stop message
-        if (AppState.isRecordingActive) {
-            AppState.stopRecording();
-            AppState.isCountdownActive = false; // Explicitly disable countdown
-            AppState.wasRecordingActive = true; // Set the flag
-            
-            // Set a temporary message until we receive confirmation from the phone
-            AppState.lastMessage = "Stopping...";
-            AppState.page = 1; // Show the message screen
-            AppState.showMessageTimeout = System.getTimer() + 5000; // Longer timeout in case of delay
-            
-            // Keep page as 1 until we receive "Recording stopped" message from phone
-            Communications.transmit("STOP", null, listener);
-            System.println("Stopping recording");
-            WatchUi.requestUpdate();
-            return;
-        }
-
-        // For non-recording, non-countdown scenarios
-        // Reset wasRecordingActive flag to ensure clean state
-        AppState.wasRecordingActive = false;
-        
-        if (swap) {
-            // Send "SWAP " + time option
-            System.println("Swap capture method: " + AppState.timeOptions[AppState.selectedIndex]);
-            // Reset wasRecordingActive flag to avoid confusion with normal transmissions
-            AppState.wasRecordingActive = false;
-            Communications.transmit("SWAP " + AppState.timeOptions[AppState.selectedIndex], null, listener);
+            handleCancelTransmit(listener);
+        } else if (AppState.isRecordingActive) {
+            handleStopRecordingTransmit(listener);
         } else {
-            // Original behavior for normal transmit
-            System.println("Transmit Normal: " + AppState.timeOptions[AppState.selectedIndex]);
-            // Reset wasRecordingActive flag to avoid confusion with normal transmissions
-            AppState.wasRecordingActive = false;
-            
-            // Don't start countdown here, let the onComplete callback handle it
-            // This prevents race conditions with message handling
-            Communications.transmit(AppState.timeOptions[AppState.selectedIndex], null, listener);
+            handleStandardTransmit(listener, swap);
         }
     } catch (ex) {
         System.println("Error in safeTransmit: " + ex.getErrorMessage());
@@ -142,37 +203,181 @@ function safeTransmit(swap) {
     }
 }
 
+/**
+ * Check if transmission is currently blocked by cooldown or already in progress
+ * @return true if transmission should be blocked, false if it can proceed
+ */
+function isTransmissionBlocked() {
+    try {
+        var currentTime = System.getTimer();
+        if (AppState.isTransmitting || 
+            (currentTime - AppState.lastTransmitTime < AppState.TRANSMIT_COOLDOWN)) {
+            System.println("Transmit blocked - cooldown or already transmitting");
+            return true;
+        }
+        return false;
+    } catch (ex) {
+        System.println("Error checking transmission block: " + ex.getErrorMessage());
+        return true; // Block on error to be safe
+    }
+}
 
-// Main input delegate for the application
+/**
+ * Handle cancel transmission when countdown is active
+ * @param listener The CommListener for this transmission
+ */
+function handleCancelTransmit(listener) {
+    try {
+        AppState.isCountdownActive = false; // Ensure it's disabled immediately
+        listener.wasCancelled = true;
+        Communications.transmit("CANCEL", null, listener);
+        System.println("Cancelling countdown");
+    } catch (ex) {
+        System.println("Error in handleCancelTransmit: " + ex.getErrorMessage());
+        AppState.isTransmitting = false;
+    }
+}
+
+/**
+ * Handle stop recording transmission
+ * @param listener The CommListener for this transmission
+ */
+function handleStopRecordingTransmit(listener) {
+    try {
+        AppState.stopRecording();
+        AppState.isCountdownActive = false; // Explicitly disable countdown
+        AppState.wasRecordingActive = true; // Set the flag
+        
+        // Set a temporary message until we receive confirmation from the phone
+        AppState.lastMessage = "Stopping...";
+        AppState.page = 1; // Show the message screen
+        AppState.showMessageTimeout = System.getTimer() + 5000; // Longer timeout in case of delay
+        
+        // Keep page as 1 until we receive "Recording stopped" message from phone
+        Communications.transmit("STOP", null, listener);
+        System.println("Stopping recording");
+        WatchUi.requestUpdate();
+    } catch (ex) {
+        System.println("Error in handleStopRecordingTransmit: " + ex.getErrorMessage());
+        AppState.isTransmitting = false;
+    }
+}
+
+/**
+ * Handle standard transmission (photo or mode switch)
+ * @param listener The CommListener for this transmission
+ * @param swap If true, sends a SWAP command to change capture mode
+ */
+function handleStandardTransmit(listener, swap) {
+    try {
+        // Reset wasRecordingActive flag to ensure clean state
+        AppState.wasRecordingActive = false;
+        
+        // Get selected time option safely
+        var timeOption = "0";
+        if (AppState has :timeOptions && AppState has :selectedIndex &&
+            AppState.timeOptions != null && AppState.selectedIndex < AppState.timeOptions.size()) {
+            timeOption = AppState.timeOptions[AppState.selectedIndex];
+        }
+        
+        if (swap) {
+            // Send "SWAP " + time option
+            System.println("Swap capture method: " + timeOption);
+            Communications.transmit("SWAP " + timeOption, null, listener);
+        } else {
+            // Original behavior for normal transmit
+            System.println("Transmit Normal: " + timeOption);
+            Communications.transmit(timeOption, null, listener);
+        }
+    } catch (ex) {
+        System.println("Error in handleStandardTransmit: " + ex.getErrorMessage());
+        AppState.isTransmitting = false;
+    }
+}
+
+/**
+ * Main input delegate for the application
+ * Handles button presses and other input events
+ */
 class CommInputDelegate extends WatchUi.BehaviorDelegate {
+    /**
+     * Initialize the delegate
+     */
     function initialize() {
         WatchUi.BehaviorDelegate.initialize();
         System.println("CommInputDelegate Init");
     }
 
-    // Implements Previous Page behavior (typically UP button or SWIPE_DOWN)
+    /**
+     * Implements Previous Page behavior (typically UP button or SWIPE_DOWN)
+     * @return true if handled, false otherwise
+     */
     function onPreviousPage() {
-        if (AppState.page == 0) {
-            AppState.selectedIndex = (AppState.selectedIndex - 1 + AppState.timeOptions.size()) % AppState.timeOptions.size();
-            WatchUi.requestUpdate();
-            System.println("Previous Page (UP)");
-            return true;
+        try {
+            if (AppState.page == 0) {
+                decrementSelectedIndex();
+                WatchUi.requestUpdate();
+                System.println("Previous Page (UP)");
+                return true;
+            }
+        } catch (ex) {
+            System.println("Error in onPreviousPage: " + ex.getErrorMessage());
         }
         return false;
     }
+    
+    /**
+     * Helper function to safely decrement the selected index with bounds checking
+     */
+    function decrementSelectedIndex() {
+        try {
+            if (AppState has :selectedIndex && AppState has :timeOptions && 
+                AppState.timeOptions != null) {
+                var optionsSize = AppState.timeOptions.size();
+                AppState.selectedIndex = (AppState.selectedIndex - 1 + optionsSize) % optionsSize;
+            }
+        } catch (ex) {
+            System.println("Error decrementing selected index: " + ex.getErrorMessage());
+        }
+    }
 
-    // Implements Next Page behavior (typically DOWN button or SWIPE_UP)
-    function onNextPage(){
-        if (AppState.page == 0) {
-            AppState.selectedIndex = (AppState.selectedIndex + 1) % AppState.timeOptions.size();
-            WatchUi.requestUpdate();
-            System.println("Next Page (DOWN)");
-            return true;
+    /**
+     * Implements Next Page behavior (typically DOWN button or SWIPE_UP)
+     * @return true if handled, false otherwise
+     */
+    function onNextPage() {
+        try {
+            if (AppState.page == 0) {
+                incrementSelectedIndex();
+                WatchUi.requestUpdate();
+                System.println("Next Page (DOWN)");
+                return true;
+            }
+        } catch (ex) {
+            System.println("Error in onNextPage: " + ex.getErrorMessage());
         }
         return false;
     }
+    
+    /**
+     * Helper function to safely increment the selected index with bounds checking
+     */
+    function incrementSelectedIndex() {
+        try {
+            if (AppState has :selectedIndex && AppState has :timeOptions && 
+                AppState.timeOptions != null) {
+                var optionsSize = AppState.timeOptions.size();
+                AppState.selectedIndex = (AppState.selectedIndex + 1) % optionsSize;
+            }
+        } catch (ex) {
+            System.println("Error incrementing selected index: " + ex.getErrorMessage());
+        }
+    }
 
-    // Implements Select behavior (typically ENTER button or CLICK_TYPE_TAP center)
+    /**
+     * Implements Select behavior (typically ENTER button or CLICK_TYPE_TAP center)
+     * @return true if handled, false otherwise
+     */
     function onSelect() {
         try {
             if (AppState.page == 0) {
@@ -194,86 +399,86 @@ class CommInputDelegate extends WatchUi.BehaviorDelegate {
         }
         return false;
     }
+    
+    /**
+     * Helper function to dismiss the message screen
+     */
+    function dismissMessageScreen() {
+        try {
+            AppState.showMessageTimeout = 0;
+            AppState.page = 0;
+            WatchUi.requestUpdate();
+            System.println("Message dismissed");
+        } catch (ex) {
+            System.println("Error dismissing message: " + ex.getErrorMessage());
+        }
+    }
 
-    // Handle key events not covered by behavioral methods
+    /**
+     * Handle key events not covered by behavioral methods
+     * @param evt The key event
+     * @return true if handled, false otherwise
+     */
     function onKey(evt) {
         try {
             var key = evt.getKey();
-            System.println("onKey: " + key);
             
-            // For page 0 (main selection screen)
-            if (AppState.page == 0) {
+            // Validate evt and key
+            if (key == null) {
+                return false;
+            }
+            
+            // Handle key down events
+            if (evt.getType() == WatchUi.PRESS_TYPE_DOWN) {
+                // Allow key handling in any page state instead of checking page == 0
+                // Specifically for UP button
                 if (key == WatchUi.KEY_UP) {
-                    return onPreviousPage();
-                } else if (key == WatchUi.KEY_DOWN) {
-                    return onNextPage();
-                } else if (key == WatchUi.KEY_ENTER) {
-                    return onSelect();
+                    AppState.upButtonPressTime = System.getTimer();
+                    // Don't handle the event further until the button is released
+                    return true;
                 }
             } 
-            // For page 1 (message screen)
-            else if (AppState.page == 1) {
-                if (key == WatchUi.KEY_ENTER || key == WatchUi.KEY_ESC) {
-                    dismissMessageScreen();
-                    return true;
-                }
-            }
-            // For page 2 (recording screen)
-            else if (AppState.page == 2 && AppState.isRecordingActive) {
-                if (key == WatchUi.KEY_ENTER || key == WatchUi.KEY_ESC) {
-                    safeTransmit(false); // Use safeTransmit to handle recording stop consistently
-                    System.println("Stop Recording (Key)");
-                    return true;
+            // Handle key release events
+            else if (evt.getType() == WatchUi.PRESS_TYPE_UP) {
+                if (key == WatchUi.KEY_UP && AppState.upButtonPressTime > 0) {
+                    var currentTime = System.getTimer();
+                    var holdTime = currentTime - AppState.upButtonPressTime;
+                    
+                    // Reset the timestamp
+                    AppState.upButtonPressTime = 0;
+                    
+                    // Check if this was a long hold
+                    if (holdTime >= AppState.UP_BUTTON_HOLD_THRESHOLD) {
+                        handleUpButtonLongPress();
+                        return true;
+                    }
                 }
             }
         } catch (ex) {
             System.println("Error in onKey: " + ex.getErrorMessage());
         }
-        
         return false;
-    }
-
-        
-    // Handle swipe events
-    function onSwipe(swipeEvent) {
-        try {
-            var direction = swipeEvent.getDirection();
-            
-            if (AppState.page == 0) {
-                if (direction == WatchUi.SWIPE_UP) {
-                    return onNextPage();
-                } else if (direction == WatchUi.SWIPE_DOWN) {
-                    return onPreviousPage();
-                }
-            } else if (AppState.page == 1) {
-                // Swipe dismisses message screen
-                dismissMessageScreen();
-                return true;
-            } else if (AppState.page == 2 && AppState.isRecordingActive) {
-                // Swipe stops recording
-                safeTransmit(false); // Use safeTransmit to handle recording stop consistently
-                System.println("Stop Recording (Swipe)");
-                return true;
-            }
-        } catch (ex) {
-            System.println("Error in onSwipe: " + ex.getErrorMessage());
-        }
-        
-        return false;
-    }
-        
-    // Helper function to dismiss message screen
-    function dismissMessageScreen() {
-        System.println("Dismiss message screen");
-        AppState.page = 0;
-        AppState.showMessageTimeout = 0;
-        WatchUi.requestUpdate();
     }
     
-    // Holding the up key triggers this
+    /**
+     * Handle UP button long press action
+     */
+    function handleUpButtonLongPress() {
+        try {
+            safeTransmit(true);
+            System.println("UP long press - SWAP command");
+        } catch (ex) {
+            System.println("Error handling UP long press: " + ex.getErrorMessage());
+        }
+    }
+    
+    /**
+     * Handle menu button press
+     * @return true if handled, false otherwise
+     */
     function onMenu() {
         try {
-           // Call safeTransmit with "VIDEO" parameter
+           // Call safeTransmit with "SWAP" parameter
            safeTransmit(true);
            System.println("OnMenu transmit");
            return true;
