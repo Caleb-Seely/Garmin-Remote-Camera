@@ -28,29 +28,39 @@ class CommListener extends Communications.ConnectionListener {
             return;
         }
         
-        // Check if we're coming from a recording state - don't start countdown
-        if (AppState.isRecordingActive || AppState.wasRecordingActive) {
-            AppState.isCountdownActive = false; // Ensure countdown is disabled
-            AppState.wasRecordingActive = false; // Reset the flag
+        // For STOP commands (recording was active)
+        if (AppState.wasRecordingActive) {
+            // Clear the flag immediately to prevent interference with other operations
+            AppState.wasRecordingActive = false;
+            
+            AppState.lastMessage = "Stopping...";
             AppState.page = 1;
-            AppState.showMessageTimeout = System.getTimer() + 1000;
+            AppState.showMessageTimeout = System.getTimer() + 2000;
             WatchUi.requestUpdate();
-            System.println("Recording Message Sent");
+            System.println("Recording Stop Message Sent");
             return;
         }
         
-        // Normal timer start case
+        // For regular commands (not cancel, not recording)
         var timeString = AppState.timeOptions[AppState.selectedIndex];
-        if (timeString != "0" && AppState.startCountdown(timeString)) {
-            AppState.lastMessage = "Starting...";
-        } else {
-            AppState.lastMessage = "Sending...";      // No countdown
+        var shouldCountdown = timeString != "0" && timeString.toNumber() > 0;
+        
+        // For non-zero timer options, start countdown
+        if (shouldCountdown && !AppState.isRecordingActive) {
+            if (AppState.startCountdown(timeString)) {
+                System.println("Starting countdown for " + timeString + " seconds");
+                // No need to set a message - the countdown UI will show
+                WatchUi.requestUpdate();
+                return;
+            }
         }
         
+        // Default case - just show a simple message
+        AppState.lastMessage = "Sending...";
         AppState.page = 1;
         AppState.showMessageTimeout = System.getTimer() + 1000;
         WatchUi.requestUpdate();
-        System.println("Transmit Complete");
+        System.println("Transmit Complete - No Countdown");
     }
 
     function onError() {
@@ -93,20 +103,37 @@ function safeTransmit(swap) {
             AppState.stopRecording();
             AppState.isCountdownActive = false; // Explicitly disable countdown
             AppState.wasRecordingActive = true; // Set the flag
-            AppState.page = 0; // Return to main screen
+            
+            // Set a temporary message until we receive confirmation from the phone
+            AppState.lastMessage = "Stopping...";
+            AppState.page = 1; // Show the message screen
+            AppState.showMessageTimeout = System.getTimer() + 5000; // Longer timeout in case of delay
+            
+            // Keep page as 1 until we receive "Recording stopped" message from phone
             Communications.transmit("STOP", null, listener);
             System.println("Stopping recording");
             WatchUi.requestUpdate();
             return;
         }
 
+        // For non-recording, non-countdown scenarios
+        // Reset wasRecordingActive flag to ensure clean state
+        AppState.wasRecordingActive = false;
+        
         if (swap) {
             // Send "SWAP " + time option
             System.println("Swap capture method: " + AppState.timeOptions[AppState.selectedIndex]);
+            // Reset wasRecordingActive flag to avoid confusion with normal transmissions
+            AppState.wasRecordingActive = false;
             Communications.transmit("SWAP " + AppState.timeOptions[AppState.selectedIndex], null, listener);
         } else {
             // Original behavior for normal transmit
             System.println("Transmit Normal: " + AppState.timeOptions[AppState.selectedIndex]);
+            // Reset wasRecordingActive flag to avoid confusion with normal transmissions
+            AppState.wasRecordingActive = false;
+            
+            // Don't start countdown here, let the onComplete callback handle it
+            // This prevents race conditions with message handling
             Communications.transmit(AppState.timeOptions[AppState.selectedIndex], null, listener);
         }
     } catch (ex) {
@@ -158,13 +185,8 @@ class CommInputDelegate extends WatchUi.BehaviorDelegate {
                 return true;
             } else if (AppState.page == 2 && AppState.isRecordingActive) {
                 // We're in recording mode, stop recording
-                AppState.stopRecording();
-                AppState.page = 0;
-                AppState.isCountdownActive = false;
-                AppState.wasRecordingActive = true; // Set the flag
-                Communications.transmit("STOP", null, new CommListener());
+                safeTransmit(false); // Use safeTransmit to handle recording stop consistently
                 System.println("Stop Recording");
-                WatchUi.requestUpdate();
                 return true;
             }
         } catch (ex) {
@@ -199,13 +221,8 @@ class CommInputDelegate extends WatchUi.BehaviorDelegate {
             // For page 2 (recording screen)
             else if (AppState.page == 2 && AppState.isRecordingActive) {
                 if (key == WatchUi.KEY_ENTER || key == WatchUi.KEY_ESC) {
-                    AppState.stopRecording();
-                    AppState.page = 0;
-                    AppState.isCountdownActive = false;
-                    AppState.wasRecordingActive = true; // Set the flag
-                    Communications.transmit("STOP", null, new CommListener());
+                    safeTransmit(false); // Use safeTransmit to handle recording stop consistently
                     System.println("Stop Recording (Key)");
-                    WatchUi.requestUpdate();
                     return true;
                 }
             }
@@ -234,13 +251,8 @@ class CommInputDelegate extends WatchUi.BehaviorDelegate {
                 return true;
             } else if (AppState.page == 2 && AppState.isRecordingActive) {
                 // Swipe stops recording
-                AppState.stopRecording();
-                AppState.page = 0;
-                AppState.isCountdownActive = false;
-                AppState.wasRecordingActive = true; // Set the flag
-                Communications.transmit("STOP", null, new CommListener());
+                safeTransmit(false); // Use safeTransmit to handle recording stop consistently
                 System.println("Stop Recording (Swipe)");
-                WatchUi.requestUpdate();
                 return true;
             }
         } catch (ex) {

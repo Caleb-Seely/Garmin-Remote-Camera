@@ -44,39 +44,42 @@ class CommView extends WatchUi.View {
    }
 
    function onTimer() {
-      // Always request an update when recording is active
+      var currentTime = System.getTimer();
+      var needsUpdate = false;
+      
+      // Always update when countdown is active to show the changing numbers
+      if (AppState.isCountdownActive) {
+         // Check if countdown has ended
+         var remaining = AppState.getRemainingTime();
+         if (remaining <= 0) {
+            // Countdown finished
+            AppState.isCountdownActive = false;
+            AppState.lastMessage = "Sending...";
+            AppState.page = 1;
+            AppState.showMessageTimeout = currentTime + 1000;
+         }
+         // Always request update for countdown to show changing numbers
+         WatchUi.requestUpdate();
+         return;
+      }
+      
+      // Always update when recording is active to show the time
       if (AppState.isRecordingActive && AppState.page == 2) {
          WatchUi.requestUpdate();
          return;
       }
       
-      var currentTime = System.getTimer();
+      // Update less frequently for other states
       if (currentTime - lastUpdateTime < 250) {
-         return; // Skip other updates if too frequent
+         return; // Skip updates if too frequent
       }
-      
-      var needsUpdate = false;
       
       // Check message timeout
       if (AppState.page == 1 && AppState.showMessageTimeout > 0) {
          if (currentTime > AppState.showMessageTimeout) {
-               AppState.showMessageTimeout = 0;
-               AppState.page = 0;
-               needsUpdate = true;
-         }
-      }
-      
-      // Check countdown
-      if (AppState.isCountdownActive) {
-         var remaining = AppState.getRemainingTime();
-         if (remaining <= 0) {
-               AppState.isCountdownActive = false;
-               AppState.lastMessage = "Sending..";
-               AppState.page = 1;
-               AppState.showMessageTimeout = currentTime + 1000;
-               needsUpdate = true;
-         } else {
-               needsUpdate = true;
+            AppState.showMessageTimeout = 0;
+            AppState.page = 0;
+            needsUpdate = true;
          }
       }
       
@@ -101,7 +104,6 @@ class CommView extends WatchUi.View {
             dc.setColor(Graphics.COLOR_YELLOW, Graphics.COLOR_TRANSPARENT);
             var font = Graphics.FONT_NUMBER_THAI_HOT;
             var timeStr = AppState.getFormattedRemainingTime();
-            
             // Protect against null or invalid time string
             if (timeStr != null && timeStr.length() > 0) {
                 dc.drawText(centerX, centerY, font, timeStr, 
@@ -122,27 +124,25 @@ class CommView extends WatchUi.View {
     dc.setColor(Graphics.COLOR_BLACK, Graphics.COLOR_BLACK);
     dc.clear();
     
-        // Draw the camera icon in the top right corner
-        if (videoIcon != null) {
-            var iconWidth = videoIcon.getWidth();
-            var iconHeight = videoIcon.getHeight();
-            
-            // Add padding from the edges
-            var videoIconX = width - paddingX - (iconWidth / 2);
-            var videoIconY = paddingY + (iconHeight / 2);
-            
-            dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
-            dc.drawBitmap(videoIconX - (iconWidth / 2), videoIconY - (iconHeight / 2), videoIcon);
-        } else {
-            // Fallback if icon isn't available
-
-        }
-        
-    
-    // Draw "REC" text
-    dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
-    dc.drawText(width * 0.7, height * 0.2 - 5, Graphics.FONT_TINY, "REC", 
-        Graphics.TEXT_JUSTIFY_CENTER | Graphics.TEXT_JUSTIFY_VCENTER);
+   // Draw the camera icon in the top right corner
+   if (videoIcon != null) {
+      var iconWidth = videoIcon.getWidth();
+      var iconHeight = videoIcon.getHeight();
+      
+      // Add padding from the edges
+      var videoIconX = width - paddingX - (iconWidth / 2);
+      var videoIconY = paddingY + (iconHeight / 2);
+      
+      // Draw "REC" text to the left of the icon
+      dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
+      dc.drawText(videoIconX - (iconWidth / 2) - 5, videoIconY, Graphics.FONT_TINY, "REC", 
+         Graphics.TEXT_JUSTIFY_RIGHT | Graphics.TEXT_JUSTIFY_VCENTER);
+      
+      dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
+      dc.drawBitmap(videoIconX - (iconWidth / 2), videoIconY - (iconHeight / 2), videoIcon);
+   } else {
+      // Fallback if icon isn't available
+   }
     
     // Get current time as a simple calculation to avoid function call errors
     var timeStr = "00:00";
@@ -241,37 +241,48 @@ class CommView extends WatchUi.View {
                     font, 
                     AppState.lastMessage, 
                     Graphics.TEXT_JUSTIFY_CENTER);
-         AppState.lastMessage = "";    //Clear the last message to avoid is showing at the wrong time
+        // Don't clear the message here - it will be cleared when the message timeout expires
     }
 
     function onUpdate(dc) {
         try {
+            // Clear the background first
+            dc.setColor(Graphics.COLOR_TRANSPARENT, Graphics.COLOR_BLACK);
+            dc.clear();
+            
+            // Debugging
+            System.println("onUpdate: page=" + AppState.page + 
+                          ", isCountdownActive=" + AppState.isCountdownActive +
+                          ", isRecordingActive=" + AppState.isRecordingActive);
+            
             // Check if countdown is active - this takes highest priority
+            // Note: We check just isCountdownActive without page dependency
             if (AppState.isCountdownActive) {
+                System.println("Drawing countdown UI");
                 drawCountdownUI(dc);
                 return;
             }
             
             // Check if recording is active
             if (AppState.isRecordingActive && AppState.page == 2) {
+                System.println("Drawing recording UI");
                 drawRecordingUI(dc);
                 return;
             }
             
             // Normal UI handling
-            dc.setColor(Graphics.COLOR_TRANSPARENT, Graphics.COLOR_BLACK);
-            dc.clear();
-            
             if(AppState.hasDirectMessagingSupport) {
                 if(AppState.page == 0) {
+                    System.println("Drawing simple UI");
                     drawSimpleUI(dc);
                 } else if(AppState.page == 1) {
-                    // First draw the UI in the background
-                    drawSimpleUI(dc);
-                    // Then overlay the message
+                    System.println("Drawing message: " + AppState.lastMessage);
+                    // For message screen, we don't draw the UI in the background
+                    // Just show the message by itself
                     drawMessage(dc);
                 } else {
                     // Fallback for unknown page state
+                    System.println("Drawing fallback UI");
                     drawSimpleUI(dc);
                 }
             } else {

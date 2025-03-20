@@ -34,30 +34,51 @@ class AppState {
     
     // New property for recording timer
     static var isRecordingActive = false;
-    static var recordingStartTime = 0;
+    static var recordingStartTime = 1; //to account for delay
     static var wasRecordingActive = false; // Flag to track if we just stopped recording
     
     // New property to track app start time
     static var appStartTime = 0;
     
-    // Flag to prevent processing messages at app start
+    // Flag to prevent processing messages at app startup
     static var ignoreMessagesOnStartup = true;
     
     // Start a countdown timer based on the selected time string (e.g. "10")
     static function startCountdown(timeString) {
+        // Ensure we're not in recording state
+        if (isRecordingActive) {
+            System.println("Cannot start countdown while recording is active");
+            return false;
+        }
+        
+        // Reset all potentially conflicting flags and states
+        wasRecordingActive = false;
+        lastMessage = ""; // Clear any pending message
+        showMessageTimeout = 0; // Reset message timeout
+        
         // Parse the time string (no units in your timeOptions)
         var seconds = 0;
         if (timeString != null && timeString.length() > 0) {
-            seconds = timeString.toNumber() - 1; //-1 to better match the phone timer
+            try {
+                seconds = timeString.toNumber() - 1; //-1 to better match the phone timer
+            } catch (ex) {
+                System.println("Error parsing time: " + ex.getErrorMessage());
+                return false;
+            }
         }
         
         if (seconds > 0) {
+            // Set UI state explicitly for countdown
+            isCountdownActive = true;
             countdownDuration = seconds * 1000; // Convert to milliseconds
             countdownStartTime = System.getTimer();
             countdownEndTime = countdownStartTime + countdownDuration;
-            isCountdownActive = true;
+            
+            // Force page to 0 which will show countdown in onUpdate
+            page = 0;
             
             System.println("Starting countdown for " + seconds + " seconds");
+            System.println("Countdown will end at " + countdownEndTime);
             return true;
         }
         
@@ -74,7 +95,7 @@ class AppState {
     
     // Start recording timer - simplified to avoid potential issues
     static function startRecording() {
-        recordingStartTime = System.getTimer() ; 
+        
         isRecordingActive = true;
         isCountdownActive = false; // Ensure countdown is off
         System.println("Recording started at " + recordingStartTime);
@@ -189,9 +210,11 @@ class CommExample extends Application.AppBase {
         
         // Check if the message is "Recording started"
         if (messageText.equals("Recording started")) {
-            // Switch to message view first to avoid direct page transition issues
-            AppState.page = 1;
+            // Start recording and immediately switch to recording page
+            AppState.recordingStartTime = System.getTimer() - 1000 ; // +1sec to accouunt for delay. Watch doesn't know its in video mode until it gets this msg 
             AppState.startRecording();
+            AppState.page = 2; // Set directly to recording page
+            AppState.wasRecordingActive = false; // Ensure this flag is reset
             
             // Vibrate to notify user
             if (Attention has :vibrate) {
@@ -199,16 +222,32 @@ class CommExample extends Application.AppBase {
             }
             
             WatchUi.requestUpdate();
+            return true;
+        }
+        
+        // Check if the message is "Recording stopped"
+        if (messageText.equals("Recording stopped")) {
+            AppState.stopRecording();
+            AppState.page = 1; // Show message screen instead of returning directly to main screen
+            AppState.lastMessage = "Recording finished";
+            AppState.wasRecordingActive = true; // Set this flag to indicate we just stopped recording
             
-            // Add a small delay before switching to recording view
-            // This gives the system time to process the initial update
-            var timer = new Timer.Timer();
-            timer.start(method(:delayedSwitchToRecording), 100, false);
+            // Set the show message timeout
+            AppState.showMessageTimeout = System.getTimer() + (AppState.MESSAGE_DISPLAY_TIME * 1000);
             
+            // Vibrate to notify user
+            if (Attention has :vibrate) {
+                Attention.vibrate([new Attention.VibeProfile(50, 500)]); // 500ms vibration
+            }
+            
+            WatchUi.requestUpdate();
             return true;
         }
         
         // For other messages, use the standard behavior
+        // Reset wasRecordingActive flag for any other messages
+        AppState.wasRecordingActive = false;
+        
         // Set the show message timeout
         AppState.showMessageTimeout = System.getTimer() + (AppState.MESSAGE_DISPLAY_TIME * 1000);
         
@@ -232,11 +271,9 @@ class CommExample extends Application.AppBase {
     }
     
     // Helper function to switch to recording view after a delay
+    // No longer needed since we're switching directly to page 2
     function delayedSwitchToRecording() as Void {
-        if (AppState.isRecordingActive) {
-            AppState.page = 2; // Set to recording page
-            WatchUi.requestUpdate();
-        }
+        // This function is kept for backward compatibility but is no longer used
     }
 
     // onStart() is called on application start up
