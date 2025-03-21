@@ -75,37 +75,27 @@ static function getRecordingElapsedTime() {
         var currentTime = System.getTimer();
         var elapsed = 0;
         
-        // Force a positive time difference - very important
+        // Calculate time difference in milliseconds
+        var diffMillis = 0;
         if (currentTime >= recordingStartTime) {
-            elapsed = (currentTime - recordingStartTime) / 1000.0; // Convert to seconds
+            diffMillis = currentTime - recordingStartTime;
         } else {
             // Timer rollover case (happens after ~71 minutes)
-            elapsed = (0xFFFFFFFF - recordingStartTime + currentTime + 1) / 1000.0;
+            diffMillis = (0xFFFFFFFF - recordingStartTime + currentTime + 1);
         }
         
-        // Ensure non-negative value
-        if (elapsed < 0) {
-            System.println("ERROR: Negative elapsed time calculated: " + elapsed);
-            elapsed = 0.1; // Use a tiny positive value to ensure time moves
-        }
+        // Convert milliseconds to seconds by integer division
+        // System.getTimer() returns milliseconds, need to convert to true seconds
+        elapsed = (diffMillis / 1000).toNumber();
         
-        // Always store this calculation for next time when recording
-        if (isRecordingActive) {
-            // Ensure time always increases
-            if (lastCalculatedTime > 0) {
-                if (elapsed <= lastCalculatedTime) {
-                    // Add a small increment to ensure time is always moving forward
-                    elapsed = lastCalculatedTime + 0.1;
-                }
-            }
-            lastCalculatedTime = elapsed;
-        }
+        // For debugging
+        System.println("Raw time: current=" + currentTime + " start=" + recordingStartTime + 
+                      " diffMillis=" + diffMillis + " elapsed=" + elapsed + "s");
         
         return elapsed;
     } catch (ex) {
         System.println("Error getting recording time: " + ex.getErrorMessage());
-        // Return last valid time or a fallback value that will show movement
-        return lastCalculatedTime > 0 ? (lastCalculatedTime + 0.1) : 0.1;
+        return lastCalculatedTime > 0 ? lastCalculatedTime : 0;
     }
 }
     
@@ -117,24 +107,20 @@ static function getRecordingElapsedTime() {
         try {
             var elapsed = getRecordingElapsedTime();
             
-            // Safety check - ensure we have a positive value
-            if (elapsed <= 0) {
-                // If this happens during active recording, use a fallback increment
-                if (isRecordingActive && lastCalculatedTime > 0) {
-                    elapsed = lastCalculatedTime + 0.1;
-                } else {
-                    elapsed = 0.1; // Fallback to a small positive value
-                }
+            // Safety check - ensure we have a valid value
+            if (elapsed < 0) {
+                elapsed = 0;
             }
             
-            // Ensure we calculate minutes and seconds correctly
-            var minutes = (elapsed / 60).toNumber();
-            var seconds = (elapsed % 60).toNumber();
+            // Ensure we have integers for formatting
+            var totalSeconds = elapsed.toNumber();
+            var minutes = (totalSeconds / 60).toNumber();
+            var seconds = (totalSeconds % 60).toNumber();
             
             return minutes.format("%02d") + ":" + seconds.format("%02d");
         } catch (ex) {
             System.println("Error formatting recording time: " + ex.getErrorMessage());
-            return "00:01"; // Use 00:01 as fallback to show movement
+            return "00:00"; // Fallback on error
         }
     }
 }

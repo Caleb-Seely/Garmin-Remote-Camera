@@ -60,6 +60,14 @@ class RecordingView extends BaseView {
             var rawTime = RecordingManager.getRecordingElapsedTime();
             System.println("Drawing UI - Raw time: " + rawTime + "s, Formatted: " + timeStr);
             
+            // Verify the timing calculation more explicitly
+            if (RecordingManager.isRecordingActive) {
+                var currentTime = System.getTimer();
+                var diffMs = currentTime - RecordingManager.recordingStartTime;
+                var realSeconds = (diffMs / 1000).toNumber();
+                System.println("TIMING CHECK: diffMs=" + diffMs + "ms, realSeconds=" + realSeconds + "s vs displayed=" + rawTime + "s");
+            }
+            
             // Draw time elapsed
             dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
             dc.drawText(centerX, centerY, Graphics.FONT_NUMBER_MEDIUM, timeStr, 

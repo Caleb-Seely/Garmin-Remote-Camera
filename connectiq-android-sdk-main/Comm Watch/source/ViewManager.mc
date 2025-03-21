@@ -50,16 +50,17 @@ class ViewManager extends BaseView {
                 updateTimer.stop();
             }
             
-            // Start a new timer that fires every 100ms for more frequent updates
-            updateTimer.start(method(:onTimerUpdate), 100, true);
-            System.println("ViewManager update timer started with 100ms interval");
+            // Start a new timer that fires once per second
+            // This is the right frequency for a seconds-based timer display
+            updateTimer.start(method(:onTimerUpdate), 1000, true);
+            System.println("ViewManager update timer started with 1000ms interval");
         } catch(ex) {
             System.println("Error starting ViewManager timer: " + ex.getErrorMessage());
             
             // Try to recover by creating a new timer
             try {
                 updateTimer = new Timer.Timer();
-                updateTimer.start(method(:onTimerUpdate), 100, true);
+                updateTimer.start(method(:onTimerUpdate), 1000, true);
                 System.println("ViewManager recovery timer started");
             } catch (ex2) {
                 System.println("Fatal error creating recovery timer: " + ex2.getErrorMessage());
