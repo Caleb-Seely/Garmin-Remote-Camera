@@ -49,7 +49,14 @@ class CameraState {
      * @param isFront True if the front camera is active
      */
     fun updateCameraFacing(isFront: Boolean) {
+        val wasFront = isFrontCamera
         isFrontCamera = isFront
+        
+        // Log the change to help with debugging
+        if (wasFront != isFront) {
+            println("Camera facing changed: " + (if (isFront) "FRONT" else "BACK"))
+        }
+        
         // Front camera can't use flash, so disable it if front camera is active
         if (isFront && isFlashEnabled) {
             isFlashEnabled = false

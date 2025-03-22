@@ -10,7 +10,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import com.garmin.android.apps.connectiq.sample.comm.camera.CameraState
-import com.garmin.android.apps.connectiq.sample.comm.camera.MyCameraManager
+import com.garmin.android.apps.connectiq.sample.comm.camera.CameraManager
 import com.garmin.android.apps.connectiq.sample.comm.connectiq.ConnectIQManager
 import com.garmin.android.apps.connectiq.sample.comm.ui.StatusMessages
 import com.garmin.android.connectiq.IQApp
@@ -46,7 +46,7 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
     val isDeviceConnected: LiveData<Boolean> = _isDeviceConnected
 
     // Properties
-    private var cameraManager: MyCameraManager? = null
+    private var cameraManager: CameraManager? = null
     private var connectIQManager: ConnectIQManager? = null
     private val handler = Handler(Looper.getMainLooper())
     private var countdownRunnable: Runnable? = null
@@ -76,7 +76,7 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
         lifecycleOwner: androidx.lifecycle.LifecycleOwner,
         viewFinder: PreviewView
     ) {
-        cameraManager = MyCameraManager(
+        cameraManager = CameraManager(
             context,
             lifecycleOwner,
             viewFinder,
@@ -103,7 +103,7 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
                     StatusMessages.RECORDING_STARTED -> {
                         startRecordingTimer()
                         Log.d(TAG, "Recording started: $status")
-                        connectIQManager?.sendMessage("Recording started")
+                        connectIQManager?.sendMessage(StatusMessages.RECORDING_STARTED)
                     }
                     StatusMessages.RECORDING_STOPPED -> {
                         stopRecordingTimer()
@@ -296,9 +296,24 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun flipCamera() {
+        Log.d(TAG, "flipCamera() called, current front camera: ${cameraManager?.isFrontCamera()}")
+        
+        // First cancel any active operations
+        if (cameraManager?.isRecording() == true || _isCountdownActive.value == true) {
+            Log.d(TAG, "Cancelling active operations before flipping camera")
+            cameraManager?.cancelCapture()
+            _countdownSeconds.postValue(0)
+            _isCountdownActive.postValue(false)
+        }
+        
+        // Flip the camera
         cameraManager?.flipCamera()
+        
         // Update flash state after camera flip
         updateFlashState()
+        
+        // Log the updated state to help with debugging
+        Log.d(TAG, "After flipCamera, front camera: ${cameraManager?.isFrontCamera()}, flash enabled: ${_isFlashEnabled.value}")
     }
 
     fun toggleVideoMode() {
@@ -478,6 +493,16 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
      */
     private fun updateFlashState() {
         val manager = cameraManager ?: return
-        _isFlashEnabled.value = !manager.isFrontCamera() && manager.isFlashEnabled()
+        
+        // Get current state
+        val isFront = manager.isFrontCamera()
+        val isFlashOn = manager.isFlashEnabled()
+        
+        Log.d(TAG, "updateFlashState: isFrontCamera=${isFront}, isFlashEnabled=${isFlashOn}")
+        
+        // Front camera can't have flash, so ensure it's off
+        if (_isFlashEnabled.value != (!isFront && isFlashOn)) {
+            _isFlashEnabled.postValue(!isFront && isFlashOn)
+        }
     }
 } 

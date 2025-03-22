@@ -18,10 +18,11 @@ object StatusMessages {
     // Photo states
     const val TAKING_PHOTO = "Taking photo..."
     const val PHOTO_SAVED = "Photo saved!"
-    
+    const val PHOTO_SUCCESS = "Captured!"   //Watch Message
+
     // Video states
-    const val RECORDING_STARTED = "Recording started"
-    const val RECORDING_STOPPED = "Recording stopped"
+    const val RECORDING_STARTED = "Recording started"   //Watch Message
+    const val RECORDING_STOPPED = "Recording stopped"   //Watch Message
     const val RECORDING_CANCELLED = "Recording cancelled"
     const val VIDEO_SAVED = "Video saved!"
     
@@ -36,4 +37,6 @@ object StatusMessages {
     const val CONNECTION_RESTORED = "Device connection restored"
     const val MESSAGE_SENT = "Message sent to device"
     const val ERROR_SENDING_MESSAGE = "Failed to send message"
+
+
 } 

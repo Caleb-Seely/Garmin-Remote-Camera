@@ -192,11 +192,29 @@ class DeviceActivity : AppCompatActivity() {
     private fun setupClickListeners() {
         // Camera flip button
         cameraFlipButton.setOnClickListener {
+            // Disable button to prevent multiple clicks
+            cameraFlipButton.isEnabled = false
+            
+            // Provide visual feedback by briefly changing button appearance
+            cameraFlipButton.alpha = 0.5f
+            
+            // Show a temporary status message
+            viewModel.updateStatusWithTimeout("Switching camera...", 2000)
+            
+            // Flip camera
             viewModel.flipCamera()
+            
             // Update flash button state based on camera position
-            flashToggleButton.isEnabled = !viewModel.isFrontCamera()
-            flashToggleButton.alpha = if (viewModel.isFrontCamera()) 
+            val isFrontCamera = viewModel.isFrontCamera()
+            flashToggleButton.isEnabled = !isFrontCamera
+            flashToggleButton.alpha = if (isFrontCamera) 
                 UIConstants.BUTTON_DISABLED_ALPHA else UIConstants.BUTTON_ENABLED_ALPHA
+                
+            // Re-enable and restore button appearance after a delay
+            Handler(Looper.getMainLooper()).postDelayed({
+                cameraFlipButton.alpha = 1.0f
+                cameraFlipButton.isEnabled = true
+            }, 1000) // Longer delay to prevent rapid consecutive clicks
         }
 
         // Flash toggle button
@@ -254,7 +272,7 @@ class DeviceActivity : AppCompatActivity() {
         // Use post with delay to ensure UI thread execution and layout is complete
         Handler(Looper.getMainLooper()).postDelayed({
             if (isFinishing) return@postDelayed
-             
+
             try {
                 // Ensure the view hierarchy is properly laid out
                 viewFinder.post {

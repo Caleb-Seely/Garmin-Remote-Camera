@@ -2,7 +2,7 @@ package com.garmin.android.apps.connectiq.sample.comm.connectiq
 
 import android.content.Context
 import android.util.Log
-import com.garmin.android.apps.connectiq.sample.comm.camera.MyCameraManager
+import com.garmin.android.apps.connectiq.sample.comm.camera.CameraManager
 import com.garmin.android.connectiq.ConnectIQ
 import com.garmin.android.connectiq.IQApp
 import com.garmin.android.connectiq.IQDevice
@@ -18,7 +18,7 @@ class ConnectIQManager(
     private val device: IQDevice,
     private val onStatusUpdate: (String) -> Unit,
     private val onConnectionUpdate: (Boolean) -> Unit,
-    private val cameraManager: MyCameraManager,
+    private val cameraManager: CameraManager,
     private val onPhotoRequest: (Int) -> Unit
 ) {
     companion object {

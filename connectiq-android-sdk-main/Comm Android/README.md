@@ -20,9 +20,9 @@ The application follows the MVVM (Model-View-ViewModel) architecture pattern to 
   - Exposes state via LiveData for the UI to observe
 
 - **Model Layer** (Data and Services)
-  - `MyCameraManager`: Handles camera operations (photo/video capture, camera switching)
-  - `ConnectIQManager`: Manages communication with Garmin devices
+  - `CameraManager`: Coordinates camera operations using specialized component managers
   - `CameraState`: Encapsulates and manages camera configuration state
+  - `ConnectIQManager`: Manages communication with Garmin devices
 
 ### Key Classes
 
@@ -33,7 +33,12 @@ The application follows the MVVM (Model-View-ViewModel) architecture pattern to 
 
 - **Managers**
   - `ConnectIQManager`: Handles Garmin device communication
-  - `MyCameraManager`: Manages camera operations
+  - `CameraManager`: Main camera coordinator class that provides a unified interface
+  - `CameraInitializer`: Handles camera setup and binding
+  - `PhotoCaptureManager`: Manages photo capture operations
+  - `VideoCaptureManager`: Handles video recording operations
+  - `CountdownManager`: Manages countdown functionality for both photo and video
+  - `CameraConfigManager`: Manages camera configuration options
 
 - **UI Components**
   - `StatusMessages`: Constants for consistent UI messaging
@@ -73,8 +78,9 @@ com.garmin.android.apps.connectiq.sample.comm
    - Connect UI to ViewModel through LiveData observers
 
 2. For new camera features:
-   - Extend `MyCameraManager` with new functionality
+   - Extend the appropriate camera component manager (e.g., `PhotoCaptureManager` for photo features)
    - Update `CameraState` to include new state properties
+   - Update `CameraManager` to coordinate the new functionality
    - Expose functionality through the ViewModel
 
 3. For new Garmin device interactions:
