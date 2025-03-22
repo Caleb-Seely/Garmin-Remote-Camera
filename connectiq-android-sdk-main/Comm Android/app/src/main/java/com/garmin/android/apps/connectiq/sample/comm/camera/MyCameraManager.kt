@@ -78,24 +78,53 @@ class MyCameraManager(
 
     fun startCamera() {
         Log.d(TAG, "startCamera() called - Instance: ${System.identityHashCode(this)}")
-        val cameraProviderFuture = ProcessCameraProvider.getInstance(context)
+        
+        // If camera is already active, don't reinitialize
+        if (isCameraActive) {
+            Log.d(TAG, "Camera is already active, skipping initialization")
+            return
+        }
+        
+        try {
+            val cameraProviderFuture = ProcessCameraProvider.getInstance(context)
 
-        cameraProviderFuture.addListener({
-            try {
-                val cameraProvider: ProcessCameraProvider = cameraProviderFuture.get()
-                Log.d(TAG, "Camera provider obtained, binding camera - Instance: ${System.identityHashCode(this)}")
-                bindCamera(cameraProvider)
-            } catch (exc: Exception) {
-                Log.e(TAG, "Camera initialization failed", exc)
-                isCameraActive = false
-                Toast.makeText(context, "Failed to start camera: ${exc.message}", Toast.LENGTH_SHORT).show()
-            }
-        }, ContextCompat.getMainExecutor(context))
+            cameraProviderFuture.addListener({
+                try {
+                    val cameraProvider: ProcessCameraProvider = cameraProviderFuture.get()
+                    Log.d(TAG, "Camera provider obtained, binding camera - Instance: ${System.identityHashCode(this)}")
+                    bindCamera(cameraProvider)
+                } catch (exc: Exception) {
+                    Log.e(TAG, "Camera initialization failed", exc)
+                    isCameraActive = false
+                    // Try with a delay as a recovery mechanism
+                    handler.postDelayed({
+                        try {
+                            val provider = ProcessCameraProvider.getInstance(context).get()
+                            bindCamera(provider)
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Camera recovery failed after delay", e)
+                            Toast.makeText(context, "Failed to start camera: ${e.message}", Toast.LENGTH_SHORT).show()
+                        }
+                    }, 500)
+                }
+            }, ContextCompat.getMainExecutor(context))
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to get camera provider", e)
+            isCameraActive = false
+        }
     }
 
     private fun bindCamera(cameraProvider: ProcessCameraProvider) {
         try {
             Log.d(TAG, "bindCamera() started - Instance: ${System.identityHashCode(this)}")
+            
+            // First unbind everything to ensure a clean slate
+            try {
+                cameraProvider.unbindAll()
+            } catch (e: Exception) {
+                Log.e(TAG, "Error unbinding previous use cases", e)
+            }
+            
             // Preview with high quality settings
             val preview = Preview.Builder()
                 .setTargetRotation(viewFinder.display.rotation)
@@ -109,7 +138,6 @@ class MyCameraManager(
                 .setTargetRotation(viewFinder.display.rotation)
                 .setCaptureMode(ImageCapture.CAPTURE_MODE_MAXIMIZE_QUALITY)
                 .setFlashMode(if (cameraState.isFlashEnabled) ImageCapture.FLASH_MODE_ON else ImageCapture.FLASH_MODE_OFF)
-                .setTargetResolution(android.util.Size(8000, 6000))
                 .setJpegQuality(100)
                 .build()
 
@@ -119,9 +147,6 @@ class MyCameraManager(
                 .build()
             videoCapture = VideoCapture.withOutput(recorder)
 
-            // Unbind all use cases before rebinding
-            cameraProvider.unbindAll()
-
             // Get camera with highest quality configuration
             val cameraSelector = CameraSelector.Builder()
                 .requireLensFacing(if (currentCameraSelector == CameraSelector.DEFAULT_BACK_CAMERA) 
@@ -129,33 +154,60 @@ class MyCameraManager(
                 .build()
 
             // Bind use cases to camera
-            camera = cameraProvider.bindToLifecycle(
-                lifecycleOwner,
-                cameraSelector,
-                preview,
-                imageCapture,
-                videoCapture
-            )
+            try {
+                camera = cameraProvider.bindToLifecycle(
+                    lifecycleOwner,
+                    cameraSelector,
+                    preview,
+                    imageCapture,
+                    videoCapture
+                )
 
-            // Configure additional camera controls if available
-            camera?.let { cam ->
-                // Initially disable torch
-                cam.cameraControl.enableTorch(false)
-                // Set capture mode to maximize quality
-                cam.cameraInfo.exposureState.let { exposureState ->
-                    if (exposureState.isExposureCompensationSupported) {
-                        cam.cameraControl.setExposureCompensationIndex(0)
+                // Configure additional camera controls if available
+                camera?.let { cam ->
+                    // Initially disable torch
+                    try {
+                        cam.cameraControl.enableTorch(false)
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Could not control torch", e)
+                    }
+                    
+                    // Set capture mode to maximize quality
+                    cam.cameraInfo.exposureState.let { exposureState ->
+                        if (exposureState.isExposureCompensationSupported) {
+                            try {
+                                cam.cameraControl.setExposureCompensationIndex(0)
+                            } catch (e: Exception) {
+                                Log.e(TAG, "Could not set exposure compensation", e)
+                            }
+                        }
                     }
                 }
-            }
 
-            isCameraInitialized = true
-            isCameraActive = true
-            Log.d(TAG, "Camera initialized and active - Instance: ${System.identityHashCode(this)}")
+                isCameraInitialized = true
+                isCameraActive = true
+                Log.d(TAG, "Camera initialized and active - Instance: ${System.identityHashCode(this)}")
 
-            // Update countdown display after successful camera switch
-            if (isCountdownActive) {
-                updateCountdownDisplay(currentCountdown)
+                // Update countdown display after successful camera switch
+                if (isCountdownActive) {
+                    updateCountdownDisplay(currentCountdown)
+                }
+            } catch (exc: Exception) {
+                // If binding fails with all use cases, try with just the preview and image capture
+                Log.e(TAG, "Full use case binding failed, trying simplified binding", exc)
+                try {
+                    camera = cameraProvider.bindToLifecycle(
+                        lifecycleOwner,
+                        cameraSelector,
+                        preview,
+                        imageCapture
+                    )
+                    isCameraInitialized = true
+                    isCameraActive = true
+                    Log.d(TAG, "Simplified camera binding successful")
+                } catch (e: Exception) {
+                    handleCameraBindingError(e, cameraProvider)
+                }
             }
         } catch (exc: Exception) {
             handleCameraBindingError(exc, cameraProvider)
@@ -640,17 +692,43 @@ class MyCameraManager(
 
     fun shutdown() {
         Log.d(TAG, "Shutting down MyCameraManager instance")
+        
+        // Stop any active capture operations
         if (isRecording()) {
-            stopVideoRecording()
+            try {
+                stopVideoRecording()
+            } catch (e: Exception) {
+                Log.e(TAG, "Error stopping recording during shutdown", e)
+            }
         }
-        cameraExecutor.shutdown()
+        
+        // Cancel any pending countdown or timer operations
         try {
-            if (!cameraExecutor.awaitTermination(800, TimeUnit.MILLISECONDS)) {
+            handler.removeCallbacksAndMessages(null)
+            currentCountdownJob?.cancel()
+            currentCountdownJob = null
+        } catch (e: Exception) {
+            Log.e(TAG, "Error canceling pending operations", e)
+        }
+        
+        // Mark camera as inactive first
+        isCameraActive = false
+        
+        // Clean up other resources
+        try {
+            cameraExecutor.shutdown()
+            try {
+                if (!cameraExecutor.awaitTermination(800, TimeUnit.MILLISECONDS)) {
+                    cameraExecutor.shutdownNow()
+                }
+            } catch (e: InterruptedException) {
                 cameraExecutor.shutdownNow()
             }
-        } catch (e: InterruptedException) {
-            cameraExecutor.shutdownNow()
+        } catch (e: Exception) {
+            Log.e(TAG, "Error shutting down camera executor", e)
         }
+        
+        // Decrement instance count for tracking purposes
         instanceCount--
         Log.d(TAG, "MyCameraManager instance shut down. Remaining instances: $instanceCount")
     }
@@ -658,4 +736,10 @@ class MyCameraManager(
     fun isActive() = isCameraActive
 
     fun isFrontCamera() = cameraState.isFrontCamera
+    
+    /**
+     * Check if flash is currently enabled
+     * @return true if flash is enabled, false otherwise
+     */
+    fun isFlashEnabled() = cameraState.isFlashEnabled
 }

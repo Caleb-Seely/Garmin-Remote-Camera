@@ -4,62 +4,56 @@
  */
 package com.garmin.android.apps.connectiq.sample.comm.activities
 
-import android.app.Activity
+import android.Manifest
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import android.os.Parcelable
-import android.util.Log
-import android.view.View
-import android.widget.Button
-import android.widget.TextView
-import android.widget.Toast
-import androidx.core.app.ActivityCompat
-import androidx.core.content.ContextCompat
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleOwner
-import androidx.lifecycle.LifecycleRegistry
-import com.garmin.android.apps.connectiq.sample.comm.R
-import com.garmin.android.connectiq.ConnectIQ
-import com.garmin.android.connectiq.IQApp
-import com.garmin.android.connectiq.IQDevice
-import com.garmin.android.connectiq.exception.InvalidStateException
-
 import android.os.Handler
 import android.os.Looper
-import android.view.WindowManager
-
-import androidx.camera.view.PreviewView
-
-import com.garmin.android.apps.connectiq.sample.comm.camera.MyCameraManager
-import com.garmin.android.apps.connectiq.sample.comm.connectiq.ConnectIQManager
-import android.widget.ImageButton
-import com.garmin.android.apps.connectiq.sample.comm.ui.UIConstants
-import com.garmin.android.apps.connectiq.sample.comm.ui.StatusMessages
-
 import android.text.SpannableString
 import android.text.Spannable
 import android.text.style.ForegroundColorSpan
+import android.util.Log
+import android.view.View
+import android.view.WindowManager
+import android.widget.ImageButton
+import android.widget.TextView
+import android.widget.Toast
+import androidx.activity.viewModels
+import androidx.appcompat.app.AppCompatActivity
+import androidx.camera.view.PreviewView
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
+import androidx.lifecycle.Observer
+import com.garmin.android.apps.connectiq.sample.comm.R
+import com.garmin.android.apps.connectiq.sample.comm.ui.StatusMessages
+import com.garmin.android.apps.connectiq.sample.comm.ui.UIConstants
+import com.garmin.android.apps.connectiq.sample.comm.viewmodel.DeviceViewModel
+import com.garmin.android.connectiq.IQDevice
 
 // TODO Add a valid store app id.
 private const val STORE_APP_ID = ""
 
-class DeviceActivity : Activity(), LifecycleOwner {
-    // Implement getLifecycle() method required by LifecycleOwner
-    private val lifecycleRegistry = LifecycleRegistry(this)
-    override val lifecycle: Lifecycle
-        get() = lifecycleRegistry
-
-
+/**
+ * Activity for interacting with a connected Garmin device to control camera functions.
+ * This activity follows MVVM architecture pattern with a DeviceViewModel handling business logic.
+ */
+class DeviceActivity : AppCompatActivity() {
     companion object {
         private const val TAG = "DeviceActivity"
         private const val EXTRA_IQ_DEVICE = "IQDevice"
-        private const val COMM_WATCH_ID = "a3421feed289106a538cb9547ab12095"
-
-
         private const val REQUEST_CODE_PERMISSIONS = 10
-        private val REQUIRED_PERMISSIONS = arrayOf(android.Manifest.permission.CAMERA)
+        private val REQUIRED_PERMISSIONS =
+            mutableListOf(
+                Manifest.permission.CAMERA
+            ).apply {
+                if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.P) {
+                    add(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                }
+            }.toTypedArray()
 
         fun getIntent(context: Context, device: IQDevice?): Intent {
             val intent = Intent(context, DeviceActivity::class.java)
@@ -68,7 +62,10 @@ class DeviceActivity : Activity(), LifecycleOwner {
         }
     }
 
-    private var openAppButtonView: ImageButton? = null
+    // ViewModel
+    private val viewModel: DeviceViewModel by viewModels()
+
+    // UI components
     private lateinit var statusTextView: TextView
     private lateinit var countdownTextView: TextView
     private lateinit var cameraFlipButton: ImageButton
@@ -76,284 +73,40 @@ class DeviceActivity : Activity(), LifecycleOwner {
     private lateinit var captureButton: ImageButton
     private lateinit var videoButton: ImageButton
     private lateinit var modeIndicator: View
-    private var isFlashEnabled = false
-    private var isVideoMode = false
-
-    private val connectIQ: ConnectIQ = ConnectIQ.getInstance()
-    private lateinit var device: IQDevice
-    private lateinit var myApp: IQApp
-
-    private lateinit var cameraManager: MyCameraManager
-    private val handler = Handler(Looper.getMainLooper())
-    private var countdownRunnable: Runnable? = null
-    private var countdownSeconds = 0
-    private var isCountdownCancelled = false  // Add flag to track cancellation
-
     private lateinit var viewFinder: PreviewView
+    private lateinit var openAppButton: ImageButton
 
-
-    private lateinit var connectIQManager: ConnectIQManager
-
-    private val onPhotoTaken = { status: String ->
-        runOnUiThread {
-            statusTextView.text = StatusMessages.PHOTO_SAVED
-            connectIQManager.sendMessage(status)
-            // Update status to ready state after a short delay
-            handler.postDelayed({
-                updateStatusWithTimeout(
-                    if (cameraManager.isVideoMode()) StatusMessages.VIDEO_READY 
-                    else StatusMessages.CAMERA_READY
-                )
-            }, UIConstants.STATUS_MESSAGE_TIMEOUT)
-        }
-    }
-
-    private val onRecordingStatusUpdate = { status: String ->
-        runOnUiThread {
-            when (status) {
-                StatusMessages.RECORDING_STARTED -> {
-                    startRecordingTimer()
-                    Log.d(TAG, "Recording started: $status")
-                    connectIQManager.sendMessage("Recording started")
-                }
-                StatusMessages.RECORDING_STOPPED -> {
-                    stopRecordingTimer()
-                    statusTextView.text = StatusMessages.RECORDING_STOPPED
-                    connectIQManager.sendMessage(StatusMessages.RECORDING_STOPPED)
-                    // Update status to ready state after recording stops
-                    handler.postDelayed({
-                        updateStatusWithTimeout(StatusMessages.VIDEO_READY)
-                    }, UIConstants.STATUS_MESSAGE_TIMEOUT)
-                }
-                StatusMessages.RECORDING_CANCELLED -> {
-
-                    //I am not sure what the difference between stopped and cancelled is, should investigate, likely todo with the watch 
-                    stopRecordingTimer()
-                    statusTextView.text = StatusMessages.RECORDING_STOPPED
-                    // Don't send any message for cancellation
-                    // Update status to ready state after recording stops
-                    handler.postDelayed({
-                        updateStatusWithTimeout(StatusMessages.VIDEO_READY)
-                    }, UIConstants.STATUS_MESSAGE_TIMEOUT)
-                }
-                else -> {
-                    statusTextView.text = status
-                }
-            }
-        }
-    }
-
-    private var recordingStartTime: Long = 0
-    private val recordingUpdateRunnable = object : Runnable {
-        override fun run() {
-            if (cameraManager.isRecording()) {
-                val elapsedSeconds = (System.currentTimeMillis() - recordingStartTime) / 1000
-                val minutes = elapsedSeconds / 60
-                val seconds = elapsedSeconds % 60
-                statusTextView.text = String.format("Recording: %02d:%02d", minutes, seconds)
-                handler.postDelayed(this, 1000)
-            }
-        }
-    }
-
-    private fun startRecordingTimer() {
-        recordingStartTime = System.currentTimeMillis()
-        handler.post(recordingUpdateRunnable)
-    }
-
-    private fun stopRecordingTimer() {
-        handler.removeCallbacks(recordingUpdateRunnable)
-    }
-
-    private fun updateStatusWithTimeout(message: String, timeoutMs: Long = UIConstants.STATUS_MESSAGE_TIMEOUT) {
-        // Don't update status if we're showing a countdown or recording
-        if (countdownTextView.visibility == View.VISIBLE || cameraManager.isRecording()) {
-            return
-        }
-        
-        statusTextView.text = message
-        handler.removeCallbacksAndMessages(null)
-        
-        // Only set up auto-reset for temporary messages
-        if (message != StatusMessages.CAMERA_READY && message != StatusMessages.VIDEO_READY) {
-            handler.postDelayed({
-                if (!isFinishing) {
-                    statusTextView.text = if (cameraManager.isVideoMode()) 
-                        StatusMessages.VIDEO_READY 
-                    else 
-                        StatusMessages.CAMERA_READY
-                }
-            }, timeoutMs)
-        }
-    }
-
-fun updateActionBarTitle(isConnected: Boolean) {
-    val prefix = "ClearShot | "
-    val deviceName = device.friendlyName
-    val fullTitle = prefix + deviceName
-    
-    val spannableTitle = SpannableString(fullTitle)
-    val deviceNameColor = if (isConnected) 
-                        ContextCompat.getColor(this, android.R.color.holo_green_light)
-                     else 
-                        ContextCompat.getColor(this, android.R.color.holo_red_light)
-    
-    // Apply color span only to the device name portion
-    spannableTitle.setSpan(
-        ForegroundColorSpan(deviceNameColor), 
-        prefix.length,  // Start index (after "ClearShot | ")
-        fullTitle.length,  // End index (end of the string)
-        Spannable.SPAN_INCLUSIVE_INCLUSIVE
-    )
-    
-    actionBar?.title = spannableTitle
-}
+    // Device reference
+    private lateinit var device: IQDevice
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_device)
 
         try {
+            // Get device from intent
             device = intent.getParcelableExtra<Parcelable>(EXTRA_IQ_DEVICE) as IQDevice
-            myApp = IQApp(COMM_WATCH_ID)
 
-            // Set initial action bar title
-            updateActionBarTitle(true)
+            // Initialize UI components
+            initializeViews()
 
-            // Initialize views
-            statusTextView = findViewById(R.id.status_text)
-            countdownTextView = findViewById(R.id.countdown_text)
-            openAppButtonView = findViewById(R.id.openapp)
-            viewFinder = findViewById(R.id.viewFinder)
-            cameraFlipButton = findViewById(R.id.camera_flip_button)
-            flashToggleButton = findViewById(R.id.flash_toggle_button)
-            captureButton = findViewById(R.id.capture_button)
-            videoButton = findViewById(R.id.video_button)
-            modeIndicator = findViewById(R.id.mode_indicator)
+            // Initialize ViewModel with required components
+            viewModel.initialize(this, this, viewFinder, device)
 
-            // Initialize managers with error handling
-            try {
-                cameraManager = MyCameraManager(
-                    this,
-                    this,
-                    viewFinder,
-                    onPhotoTaken = onPhotoTaken,
-                    onCountdownUpdate = { seconds ->
-                        runOnUiThread {
-                            countdownTextView.text = if (seconds > 0) seconds.toString() else ""
-                            countdownTextView.visibility = if (seconds > 0) View.VISIBLE else View.GONE
-                        }
-                    },
-                    onCameraSwapEnabled = { enabled ->
-                        runOnUiThread {
-                            cameraFlipButton.visibility = if (enabled) View.VISIBLE else View.GONE
-                        }
-                    },
-                    onRecordingStatusUpdate = onRecordingStatusUpdate
-                )
+            // Set up observers
+            setupObservers()
 
-                // Set initial icons and states after camera manager is initialized
-                isFlashEnabled = false
-                flashToggleButton.setImageResource(R.drawable.ic_baseline_flash_off_24)
-                flashToggleButton.isEnabled = !cameraManager.isFrontCamera()
-                flashToggleButton.alpha = if (cameraManager.isFrontCamera()) 0.5f else 1.0f
-                videoButton.setImageResource(R.drawable.ic_baseline_videocam_24)
-                captureButton.setImageResource(R.drawable.ic_baseline_camera_24)
-                updateStatusWithTimeout(StatusMessages.CAMERA_READY)
-
-                // Initialize camera with permission check
-                if (allPermissionsGranted()) {
-                    try {
-                        // Add a small delay before starting camera to ensure view is ready
-                        handler.postDelayed({
-                            try {
-                                cameraManager.startCamera()
-                            } catch (e: Exception) {
-                                Log.e(TAG, "Failed to start camera after delay", e)
-                                // Try flipping camera as a fallback
-                                try {
-                                    cameraManager.flipCamera()
-                                } catch (e2: Exception) {
-                                    Log.e(TAG, "Failed to flip camera as fallback", e2)
-                                    Toast.makeText(this, "Camera initialization failed", Toast.LENGTH_LONG).show()
-                                    finish()
-                                }
-                            }
-                        }, 100)
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Failed to start camera", e)
-                        Toast.makeText(this, "Failed to start camera: ${e.message}", Toast.LENGTH_LONG).show()
-                        finish()
-                    }
-                } else {
-                    ActivityCompat.requestPermissions(
-                        this, REQUIRED_PERMISSIONS, REQUEST_CODE_PERMISSIONS
-                    )
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to initialize camera manager", e)
-                Toast.makeText(this, "Camera initialization failed: ${e.message}", Toast.LENGTH_LONG).show()
-                finish()
-                return
-            }
-
-            connectIQManager = ConnectIQManager(
-                this, 
-                device, 
-                statusTextView,
-                cameraManager,  // Pass the same instance
-                onPhotoRequest = { delaySeconds ->
-                    when {
-                        delaySeconds == -1 -> {
-                            // Cancel request received
-                            Log.d(TAG, "Cancel request received")
-                            isCountdownCancelled = true
-                            cameraManager.cancelCapture()
-                            statusTextView.text = StatusMessages.RECORDING_CANCELLED
-                            countdownTextView.text = ""
-                            countdownTextView.visibility = View.GONE
-                        }
-                        delaySeconds == -2 -> {
-                            // Immediate video command
-                            if (!cameraManager.isVideoMode()) {
-                                cameraManager.toggleVideoMode()
-                                updateModeIndicator(true)
-                                updateStatusWithTimeout(StatusMessages.VIDEO_MODE)
-                            }
-                            cameraManager.startVideoRecording()
-                        }
-                        delaySeconds < -2 -> {
-                            // Delayed video command (convert back to positive delay)
-                            val actualDelay = -(delaySeconds + 3)
-                            if (!cameraManager.isVideoMode()) {
-                                cameraManager.toggleVideoMode()
-                                updateModeIndicator(true)
-                            }
-                            startVideoCountdown(actualDelay)
-                        }
-                        delaySeconds > 0 -> {
-                            // Regular photo with delay
-                            if (cameraManager.isVideoMode()) {
-                                cameraManager.toggleVideoMode()
-                                updateModeIndicator(false)
-                            }
-                            startCountdown(delaySeconds)
-                        }
-                        else -> {
-                            // Immediate photo
-                            if (cameraManager.isVideoMode()) {
-                                cameraManager.toggleVideoMode()
-                                updateModeIndicator(false)
-                            }
-                            cameraManager.takePhoto()
-                        }
-                    }
-                }
-            )
-
-
-
+            // Set up click listeners
             setupClickListeners()
+
+            // Check permissions and start camera if granted
+            if (allPermissionsGranted()) {
+                viewModel.startCamera()
+            } else {
+                ActivityCompat.requestPermissions(
+                    this, REQUIRED_PERMISSIONS, REQUEST_CODE_PERMISSIONS
+                )
+            }
 
             // Keep screen on for countdown and recording
             window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
@@ -365,260 +118,261 @@ fun updateActionBarTitle(isConnected: Boolean) {
         }
     }
 
-    override fun onDestroy() {
-        super.onDestroy()
-        countdownRunnable?.let { handler.removeCallbacks(it) }
-        window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        if (cameraManager.isRecording()) {
-            cameraManager.cancelCapture()
+    private fun initializeViews() {
+        // Find views
+        statusTextView = findViewById(R.id.status_text)
+        countdownTextView = findViewById(R.id.countdown_text)
+        openAppButton = findViewById(R.id.openapp)
+        viewFinder = findViewById(R.id.viewFinder)
+        cameraFlipButton = findViewById(R.id.camera_flip_button)
+        flashToggleButton = findViewById(R.id.flash_toggle_button)
+        captureButton = findViewById(R.id.capture_button)
+        videoButton = findViewById(R.id.video_button)
+        modeIndicator = findViewById(R.id.mode_indicator)
+
+        // Initial UI state
+        flashToggleButton.setImageResource(R.drawable.ic_baseline_flash_off_24)
+        flashToggleButton.alpha = UIConstants.BUTTON_DISABLED_ALPHA
+        videoButton.setImageResource(R.drawable.ic_baseline_videocam_24)
+        captureButton.setImageResource(R.drawable.ic_baseline_camera_24)
+        
+        // Add a global layout listener to update mode indicator position once layout is complete
+        viewFinder.viewTreeObserver.addOnGlobalLayoutListener {
+            // Get current video mode
+            val isVideoMode = viewModel.isVideoMode.value ?: false
+            
+            // Force an update to mode indicator position after layout completes
+            Handler(Looper.getMainLooper()).postDelayed({
+                updateModeIndicator(isVideoMode)
+            }, 100)
         }
-        cameraManager.shutdown()
     }
 
-    override fun onResume() {
-        super.onResume()
-        lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_RESUME)
-        connectIQManager.registerForAppEvents()
-        
-        // Update action bar title color based on connection status
-        updateActionBarTitle(connectIQManager.isDeviceConnected())
-        
-        // Add a small delay before restarting camera to ensure proper cleanup
-        handler.postDelayed({
-            if (!cameraManager.isActive()) {
-                try {
-                    cameraManager.startCamera()
-                } catch (e: Exception) {
-                    Log.e(TAG, "Failed to restart camera in onResume", e)
-                    // Try flipping camera as a fallback
-                    try {
-                        cameraManager.flipCamera()
-                    } catch (e2: Exception) {
-                        Log.e(TAG, "Failed to flip camera as fallback", e2)
-                    }
+    private fun setupObservers() {
+        // Observe status message changes
+        viewModel.statusMessage.observe(this, Observer { message ->
+            statusTextView.text = message
+        })
+
+        // Observe countdown changes
+        viewModel.countdownSeconds.observe(this, Observer { seconds ->
+            countdownTextView.text = if (seconds > 0) seconds.toString() else ""
+            countdownTextView.visibility = if (seconds > 0) View.VISIBLE else View.GONE
+        })
+
+        // Observe video mode changes
+        viewModel.isVideoMode.observe(this, Observer { isVideoMode ->
+            Log.d(TAG, "Observer: isVideoMode changed to $isVideoMode")
+            
+            // Clear any pending UI updates to avoid race conditions
+            Handler(Looper.getMainLooper()).removeCallbacksAndMessages(null)
+            
+            // Add a small delay to ensure UI is ready
+            Handler(Looper.getMainLooper()).postDelayed({
+                if (!isFinishing) {
+                    updateModeIndicator(isVideoMode)
                 }
-            }
-        }, 100) // Small delay to ensure proper cleanup
-    }
+            }, 50)
+        })
 
-    override fun onPause() {
-        super.onPause()
-        lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_PAUSE)
-        
-        // Update action bar title color based on connection status
-        updateActionBarTitle(connectIQManager.isDeviceConnected())
-        
-        // Ensure camera is properly stopped before pausing
-        try {
-            if (cameraManager.isActive()) {
-                // If we're recording, stop the recording first
-                if (cameraManager.isRecording()) {
-                    cameraManager.stopVideoRecording()
-                }
-                // Then shutdown the camera
-                cameraManager.shutdown()
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error stopping camera in onPause", e)
-        }
+        // Observe flash state changes
+        viewModel.isFlashEnabled.observe(this, Observer { isEnabled ->
+            updateFlashButtonIcon(isEnabled)
+        })
 
-        try {
-            connectIQ.unregisterForDeviceEvents(device)
-            connectIQ.unregisterForApplicationEvents(device, myApp)
-        } catch (_: InvalidStateException) {
-        }
-        connectIQManager.unregisterForEvents()
-    }
+        // Observe device connection state
+        viewModel.isDeviceConnected.observe(this, Observer { isConnected ->
+            updateActionBarTitle(isConnected)
+        })
 
-    private fun setupButtons() {
-        findViewById<Button>(R.id.openapp).setOnClickListener {
-            connectIQManager.openApp()
-        }
-
-        findViewById<Button>(R.id.send_test_msg_button).setOnClickListener {
-            connectIQManager.sendMessage("Test Message")
-        }
+        // Initialize with status message
+        viewModel.updateStatusWithTimeout(StatusMessages.CAMERA_READY)
     }
 
     private fun setupClickListeners() {
         // Camera flip button
         cameraFlipButton.setOnClickListener {
-            cameraManager.flipCamera()
-            // Disable flash for front camera
-            if (cameraManager.isFrontCamera()) {
-                isFlashEnabled = false
-                flashToggleButton.isEnabled = false
-                flashToggleButton.alpha = UIConstants.BUTTON_DISABLED_ALPHA
-                updateFlashButtonIcon()
-            } else {
-                flashToggleButton.isEnabled = true
-                flashToggleButton.alpha = UIConstants.BUTTON_ENABLED_ALPHA
-            }
+            viewModel.flipCamera()
+            // Update flash button state based on camera position
+            flashToggleButton.isEnabled = !viewModel.isFrontCamera()
+            flashToggleButton.alpha = if (viewModel.isFrontCamera()) 
+                UIConstants.BUTTON_DISABLED_ALPHA else UIConstants.BUTTON_ENABLED_ALPHA
         }
 
         // Flash toggle button
         flashToggleButton.setOnClickListener {
-            if (!cameraManager.isFrontCamera()) {
-                isFlashEnabled = !isFlashEnabled
-                flashToggleButton.isSelected = isFlashEnabled
-                cameraManager.toggleFlash()
-                updateFlashButtonIcon()
-                updateStatusWithTimeout(
-                    if (isFlashEnabled) StatusMessages.FLASH_ENABLED 
-                    else StatusMessages.FLASH_DISABLED
-                )
+            if (!viewModel.isFrontCamera()) {
+                viewModel.toggleFlash()
             }
         }
 
         // Camera mode button
         captureButton.setOnClickListener {
-            if (cameraManager.isVideoMode()) {
-                // Switch to camera mode
-                cameraManager.toggleVideoMode()
-                updateModeIndicator(false)
-                updateStatusWithTimeout(StatusMessages.PHOTO_MODE)
+            if (viewModel.isVideoMode.value == true) {
+                // Switch to photo mode
+                viewModel.toggleVideoMode()
+                viewModel.updateStatusWithTimeout(StatusMessages.PHOTO_MODE)
             } else {
                 // Take photo
-
-                cameraManager.takePhoto()
+                viewModel.takePhoto()
             }
         }
 
         // Video mode button
         videoButton.setOnClickListener {
-            if (cameraManager.isVideoMode()) {
+            if (viewModel.isVideoMode.value == true) {
                 // Toggle recording
-                handleVideoButtonClick()
+                viewModel.handleVideoButtonClick()
             } else {
                 // Switch to video mode
-                cameraManager.toggleVideoMode()
-                updateModeIndicator(true)
-                updateStatusWithTimeout(StatusMessages.VIDEO_MODE)
+                viewModel.toggleVideoMode()
+                viewModel.updateStatusWithTimeout(StatusMessages.VIDEO_MODE)
             }
         }
 
         // Open app button
-        findViewById<View>(R.id.openapp).setOnClickListener {
-            connectIQManager.openApp()
+        openAppButton.setOnClickListener {
+            viewModel.openApp()
         }
 
-        // Send test message button
+        // Send test message button (we now use this as a back button)
         findViewById<View>(R.id.send_test_msg_button).setOnClickListener {
             finish()
         }
     }
 
-    private fun updateFlashButtonIcon() {
+    private fun updateFlashButtonIcon(isEnabled: Boolean) {
         flashToggleButton.setImageResource(
-            if (isFlashEnabled) R.drawable.ic_baseline_flash_on_24
+            if (isEnabled) R.drawable.ic_baseline_flash_on_24
             else R.drawable.ic_baseline_flash_off_24
         )
     }
 
-    private fun updateCaptureButtonIcon() {
-        captureButton.setImageResource(
-            if (isVideoMode) R.drawable.ic_baseline_videocam_24
-            else R.drawable.ic_baseline_camera_24
-        )
-    }
-
-    private fun startCountdown(seconds: Int) {
-        // Reset cancel flag
-        isCountdownCancelled = false
-        
-        // Clear any existing countdown
-        countdownRunnable?.let { handler.removeCallbacks(it) }
-
-        // Start countdown
-        countdownSeconds = seconds
-        countdownTextView.visibility = View.VISIBLE
-        countdownTextView.text = seconds.toString()
-        
-        countdownRunnable = object : Runnable {
-            override fun run() {
-                if (countdownSeconds > 0 && !isCountdownCancelled) {
-                    countdownSeconds--
-                    countdownTextView.text = countdownSeconds.toString()
-                    handler.postDelayed(this, 1000)
-                } else {
-                    countdownTextView.visibility = View.GONE
-                    if (!isCountdownCancelled) {
-                        cameraManager.takePhoto()
-                    }
-                }
-            }
-        }
-        handler.post(countdownRunnable!!)
-    }
-
     fun updateModeIndicator(isVideo: Boolean) {
-        val targetTranslationX = if (isVideo) videoButton.x - captureButton.x else 0f
-        modeIndicator.animate()
-            .translationX(targetTranslationX)
-            .setDuration(UIConstants.MODE_SWITCH_ANIMATION_DURATION)
-            .start()
-
-        updateButtonSizes(isVideo) 
+        Log.d(TAG, "updateModeIndicator: isVideo=$isVideo")
+        
+        // Use post with delay to ensure UI thread execution and layout is complete
+        Handler(Looper.getMainLooper()).postDelayed({
+            if (isFinishing) return@postDelayed
+             
+            try {
+                // Ensure the view hierarchy is properly laid out
+                viewFinder.post {
+                    // Measure the actual positions after layout
+                    val capturePos = IntArray(2)
+                    val videoPos = IntArray(2)
+                    captureButton.getLocationInWindow(capturePos)
+                    videoButton.getLocationInWindow(videoPos)
+                    
+                    val captureX = captureButton.x
+                    val videoX = videoButton.x
+                    
+                    // Calculate target translation based on actual measured positions
+                    val targetTranslationX = if (isVideo) videoX - captureX else 0f
+                    Log.d(TAG, "Animating indicator to x=$targetTranslationX (isVideo=$isVideo, captureX=$captureX, videoX=$videoX)")
+                    
+                    modeIndicator.animate()
+                        .translationX(targetTranslationX)
+                        .setDuration(UIConstants.MODE_SWITCH_ANIMATION_DURATION)
+                        .start()
+                    
+                    updateButtonSizes(isVideo)
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error animating mode indicator", e)
+            }
+        }, 50) // Small delay to ensure layout is stable
     }
 
-   private fun updateButtonSizes(isVideoMode: Boolean) {
-        val scale = if (isVideoMode) 1.4f else 1.0f
+    private fun updateButtonSizes(isVideoMode: Boolean) {
+        val videoScale = if (isVideoMode) UIConstants.ACTIVE_BUTTON_SCALE else UIConstants.INACTIVE_BUTTON_SCALE
+        val photoScale = if (isVideoMode) UIConstants.INACTIVE_BUTTON_SCALE else UIConstants.ACTIVE_BUTTON_SCALE
+        
         videoButton.animate()
-            .scaleX(scale)
-            .scaleY(scale)
-            .setDuration(200)
+            .scaleX(videoScale)
+            .scaleY(videoScale)
+            .setDuration(UIConstants.MODE_SWITCH_ANIMATION_DURATION)
             .start()
         
         captureButton.animate()
-            .scaleX(1.0f / scale)
-            .scaleY(1.0f / scale)
-            .setDuration(200)
+            .scaleX(photoScale)
+            .scaleY(photoScale)
+            .setDuration(UIConstants.MODE_SWITCH_ANIMATION_DURATION)
             .start()
     }
 
-    private fun handleVideoButtonClick() {
-        if (cameraManager.isRecording()) {
-            cameraManager.stopVideoRecording()
-        } else {
-            cameraManager.startVideoRecording()
+    fun updateActionBarTitle(isConnected: Boolean) {
+        val prefix = "ClearShot | "
+        val deviceName = device.friendlyName
+        val fullTitle = prefix + deviceName
+        
+        val spannableTitle = SpannableString(fullTitle)
+        val deviceNameColor = if (isConnected) 
+                        ContextCompat.getColor(this, android.R.color.holo_green_light)
+                     else 
+                        ContextCompat.getColor(this, android.R.color.holo_red_light)
+        
+        // Apply color span only to the device name portion
+        spannableTitle.setSpan(
+            ForegroundColorSpan(deviceNameColor), 
+            prefix.length,  // Start index (after "ClearShot | ")
+            fullTitle.length,  // End index (end of the string)
+            Spannable.SPAN_INCLUSIVE_INCLUSIVE
+        )
+        
+        supportActionBar?.title = spannableTitle
+    }
+
+    override fun onResume() {
+        super.onResume()
+        viewModel.registerForAppEvents()
+        
+        // Add a delay to ensure the UI is ready before restarting the camera
+        Handler(Looper.getMainLooper()).postDelayed({
+            if (!isFinishing) {
+                try {
+                    viewModel.startCamera()
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error starting camera in onResume", e)
+                }
+            }
+        }, 300)
+    }
+
+    override fun onPause() {
+        super.onPause()
+        
+        // Properly clean up before pausing
+        try {
+            viewModel.unregisterForEvents()
+        } catch (e: Exception) {
+            Log.e(TAG, "Error unregistering events in onPause", e)
         }
     }
 
-    private fun startVideoCountdown(seconds: Int) {
-        // Reset cancel flag
-        isCountdownCancelled = false
+    override fun onStop() {
+        super.onStop()
         
-        // Clear any existing countdown
-        countdownRunnable?.let { handler.removeCallbacks(it) }
-        
-        // Update status text
-        statusTextView.text = "Starting video recording in $seconds seconds"
-        
-        // Start countdown
-        countdownSeconds = seconds
-        countdownTextView.visibility = View.VISIBLE
-        countdownTextView.text = seconds.toString()
-        
-        countdownRunnable = object : Runnable {
-            override fun run() {
-                if (countdownSeconds > 0 && !isCountdownCancelled) {
-                    countdownSeconds--
-                    countdownTextView.text = countdownSeconds.toString()
-                    handler.postDelayed(this, 1000)
-                } else {
-                    countdownTextView.visibility = View.GONE
-                    if (!isCountdownCancelled) {
-                        // Ensure we're in video mode before starting recording
-                        if (!cameraManager.isVideoMode()) {
-                            cameraManager.toggleVideoMode()
-                            updateModeIndicator(true)
-                        }
-                        cameraManager.startVideoRecording()
-                    }
-                }
-            }
+        // When activity is stopped (not visible), shut down camera to free resources
+        try {
+            viewModel.shutdown()
+        } catch (e: Exception) {
+            Log.e(TAG, "Error shutting down in onStop", e)
         }
-        handler.post(countdownRunnable!!)
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        
+        // Clear flags and perform final cleanup
+        window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        
+        // Ensure camera is properly shut down
+        try {
+            viewModel.shutdown()
+        } catch (e: Exception) {
+            Log.e(TAG, "Error shutting down in onDestroy", e)
+        }
     }
 
     /**
@@ -640,14 +394,14 @@ fun updateActionBarTitle(isConnected: Boolean) {
         if (requestCode == REQUEST_CODE_PERMISSIONS) {
             if (allPermissionsGranted()) {
                 try {
-                    cameraManager.startCamera()
+                    viewModel.startCamera()
                 } catch (e: Exception) {
                     Log.e(TAG, "Failed to start camera after permission grant", e)
                     Toast.makeText(this, "Failed to start camera: ${e.message}", Toast.LENGTH_LONG).show()
                     finish()
                 }
             } else {
-                Toast.makeText(this, "Permissions not granted by the user.", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, StatusMessages.ERROR_CAMERA_PERMISSION, Toast.LENGTH_SHORT).show()
                 finish()
             }
         }

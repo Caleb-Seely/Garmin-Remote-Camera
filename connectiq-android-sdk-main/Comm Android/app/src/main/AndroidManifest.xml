@@ -45,9 +45,12 @@
             </intent-filter>
         </activity>
 
-        <activity android:name=".activities.DeviceActivity" />
+        <activity 
+            android:name=".activities.DeviceActivity"
+            android:theme="@style/Theme.AppCompat.Light.DarkActionBar" />
 
-        <activity android:name=".activities.HelpActivity"
+        <activity 
+            android:name=".activities.HelpActivity"
             android:theme="@style/Theme.AppCompat.Light.DarkActionBar" />
 
     </application>

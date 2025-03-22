@@ -2,21 +2,22 @@ package com.garmin.android.apps.connectiq.sample.comm.connectiq
 
 import android.content.Context
 import android.util.Log
-import android.widget.TextView
-import android.widget.Toast
 import com.garmin.android.apps.connectiq.sample.comm.camera.MyCameraManager
-import com.garmin.android.apps.connectiq.sample.comm.camera.MyCameraManager.Companion
 import com.garmin.android.connectiq.ConnectIQ
 import com.garmin.android.connectiq.IQApp
 import com.garmin.android.connectiq.IQDevice
 import com.garmin.android.connectiq.exception.InvalidStateException
 import com.garmin.android.connectiq.exception.ServiceUnavailableException
-import com.garmin.android.apps.connectiq.sample.comm.activities.DeviceActivity
 
+/**
+ * Manager for ConnectIQ device communications.
+ * Handles message exchange with Garmin devices and provides callbacks for events.
+ */
 class ConnectIQManager(
     private val context: Context,
     private val device: IQDevice,
-    private val statusTextView: TextView,
+    private val onStatusUpdate: (String) -> Unit,
+    private val onConnectionUpdate: (Boolean) -> Unit,
     private val cameraManager: MyCameraManager,
     private val onPhotoRequest: (Int) -> Unit
 ) {
@@ -30,41 +31,46 @@ class ConnectIQManager(
     private var appIsOpen = false
 
     private val openAppListener = ConnectIQ.IQOpenApplicationListener { _, _, status ->
-        if (status == ConnectIQ.IQOpenApplicationStatus.APP_IS_ALREADY_RUNNING) {
-            appIsOpen = true
-        } else {
-            appIsOpen = false
-        }
+        appIsOpen = status == ConnectIQ.IQOpenApplicationStatus.APP_IS_ALREADY_RUNNING
+        Log.d(TAG, "App open status: $appIsOpen")
     }
 
+    /**
+     * Opens the ConnectIQ app on the device
+     */
     fun openApp() {
-        Toast.makeText(context, "Opening app...", Toast.LENGTH_SHORT).show()
+        Log.d(TAG, "Opening app on device: ${device.friendlyName}")
         try {
             connectIQ.openApplication(device, myApp, openAppListener)
+        } catch (e: InvalidStateException) {
+            Log.e(TAG, "Error opening app: ConnectIQ not in valid state", e)
+            onStatusUpdate("Error: ConnectIQ not ready")
+        } catch (e: ServiceUnavailableException) {
+            Log.e(TAG, "Error opening app: Service unavailable", e)
+            onStatusUpdate("Error: ConnectIQ service unavailable")
         } catch (e: Exception) {
-            Log.e(TAG, "Error opening app", e)
+            Log.e(TAG, "Unexpected error opening app", e)
+            onStatusUpdate("Error opening app: ${e.message}")
         }
     }
 
+    /**
+     * Registers for device and app events
+     */
     fun registerForAppEvents() {
         try {
             // Register for device status updates
             connectIQ.registerForDeviceEvents(device) { device, status ->
                 Log.d(TAG, "Device status changed: ${status.name}")
-                // Update action bar title color based on connection status
-                (context as? DeviceActivity)?.updateActionBarTitle(status == IQDevice.IQDeviceStatus.CONNECTED)
+                onConnectionUpdate(status == IQDevice.IQDeviceStatus.CONNECTED)
             }
 
             connectIQ.registerForAppEvents(device, myApp) { _, _, message, _ ->
-                Log.d(TAG, "New message received: ${message} camera-manager: ${cameraManager.isRecording()}")
+                Log.d(TAG, "New message received: $message, recording: ${cameraManager.isRecording()}")
 
                 // If recording is in progress, stop it regardless of the message
                 if (cameraManager.isRecording()) {
                     Log.d(TAG, "Recording in progress, stopping video")
-                    //I don't think we need to update status text here
-//                    statusTextView.post {
-//                        statusTextView.text = "Stopping recording"
-//                    }
                     onPhotoRequest(-1) // Send cancellation command to stop recording
                     return@registerForAppEvents
                 }
@@ -80,9 +86,10 @@ class ConnectIQManager(
             }
         } catch (e: InvalidStateException) {
             Log.e(TAG, "ConnectIQ is not in a valid state", e)
-            statusTextView.post {
-                statusTextView.text = "Error: ConnectIQ not ready"
-            }
+            onStatusUpdate("Error: ConnectIQ not ready")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error registering for app events", e)
+            onStatusUpdate("Error: Failed to connect to device")
         }
     }
 
@@ -116,21 +123,25 @@ class ConnectIQManager(
                 val delayStr = firstItem.substringAfter("SWAP", "").trim()
                 val delay = if (delayStr.isEmpty()) 0 else delayStr.toIntOrNull() ?: 0
 
-                // Toggle the camera mode
+                // Notify that a mode swap occurred (this will be observed in the ViewModel)
+                Log.d(TAG, "Mode swap command received, sending MODE_SWAP notification")
+                onStatusUpdate("MODE_SWAP")
+                
+                // Get current mode - but DON'T toggle here, let the ViewModel handle it
                 val isCurrentlyVideoMode = cameraManager.isVideoMode()
-                cameraManager.toggleVideoMode()
-                (context as? DeviceActivity)?.updateModeIndicator(!isCurrentlyVideoMode)
 
-                // After swap, use proper request code based on new mode and delay
-                return if (!isCurrentlyVideoMode) {
-                    // Switched to video mode
-                    if (delay > 0) -3 - delay else -2
+                // If currently in video mode, we'll switch to photo mode
+                // If currently in photo mode, we'll switch to video mode
+                // So we need to return codes for the OPPOSITE of the current mode
+                return if (isCurrentlyVideoMode) {
+                    // Currently in video mode, will switch to photo mode -> return photo codes
+                    if (delay > 0) 100 + delay else 100  // 100 = swap to photo then take photo
                 } else {
-                    // Switched to photo mode
-                    if (delay > 0) delay else 0
+                    // Currently in photo mode, will switch to video mode -> return video codes
+                    if (delay > 0) -100 - delay else -100  // -100 = swap to video then record
                 }
             }
-
+            
             // Handle numeric delay as string
             val delay = firstItem.toIntOrNull() ?: 0
             return if (cameraManager.isVideoMode()) {
@@ -155,53 +166,74 @@ class ConnectIQManager(
     }
 
     /**
-     * Update the status text based on the request code
+     * Update status based on the request code
      */
     private fun updateStatusText(requestCode: Int) {
-        statusTextView.post {
-            statusTextView.text = when {
-                requestCode == -1 -> "Cancelled request"
-                requestCode == -2 -> "Starting recording"
-                requestCode < -2 -> {
-                    val delay = -(requestCode + 3)
-                    "Starting recording in $delay seconds"
-                }
-                requestCode > 0 -> "Taking photo in $requestCode seconds"
-                else -> "Taking photo..."
+        val statusMessage = when {
+            requestCode == -1 -> "Cancelled request"
+            requestCode == -100 -> "Swapping to video mode"
+            requestCode < -100 -> {
+                val delay = -(requestCode + 100)
+                "Swapping to video mode, recording in $delay seconds"
             }
+            requestCode == 100 -> "Swapping to photo mode"
+            requestCode > 100 -> {
+                val delay = requestCode - 100
+                "Swapping to photo mode, photo in $delay seconds"
+            }
+            requestCode == -2 -> "Starting recording"
+            requestCode < -2 -> {
+                val delay = -(requestCode + 3)
+                "Starting recording in $delay seconds"
+            }
+            requestCode > 0 -> "Taking photo in $requestCode seconds"
+            else -> "Taking photo..."
         }
+        onStatusUpdate(statusMessage)
     }
 
+    /**
+     * Sends a message to the connected device
+     */
     fun sendMessage(message: Any) {
         try {
             connectIQ.sendMessage(device, myApp, message) { _, _, status ->
-                statusTextView.post {
-                    Log.d(TAG, "Message sent: ${status.name}")
-                }
+                Log.d(TAG, "Message sent: ${status.name}")
             }
         } catch (e: InvalidStateException) {
-            statusTextView.post {
-                statusTextView.text = "Error: ConnectIQ not ready"
-            }
+            Log.e(TAG, "Error sending message: ConnectIQ not in valid state", e)
+            onStatusUpdate("Error: ConnectIQ not ready")
         } catch (e: ServiceUnavailableException) {
-            statusTextView.post {
-                statusTextView.text = "Error: Service unavailable"
-            }
+            Log.e(TAG, "Error sending message: Service unavailable", e)
+            onStatusUpdate("Error: Service unavailable")
+        } catch (e: Exception) {
+            Log.e(TAG, "Unexpected error sending message", e)
+            onStatusUpdate("Error sending message: ${e.message}")
         }
     }
 
+    /**
+     * Unregisters from device and app events
+     */
     fun unregisterForEvents() {
         try {
             connectIQ.unregisterForApplicationEvents(device, myApp)
             connectIQ.unregisterForDeviceEvents(device)
-        } catch (_: InvalidStateException) {
+        } catch (e: InvalidStateException) {
+            Log.e(TAG, "Error unregistering for events", e)
+        } catch (e: Exception) {
+            Log.e(TAG, "Unexpected error unregistering for events", e)
         }
     }
 
+    /**
+     * Checks if the device is currently connected
+     */
     fun isDeviceConnected(): Boolean {
         return try {
             connectIQ.getDeviceStatus(device) == IQDevice.IQDeviceStatus.CONNECTED
         } catch (e: Exception) {
+            Log.e(TAG, "Error checking device connection status", e)
             false
         }
     }

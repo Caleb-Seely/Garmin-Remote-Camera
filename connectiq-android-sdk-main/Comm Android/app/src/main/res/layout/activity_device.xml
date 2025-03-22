@@ -59,6 +59,7 @@
             android:layout_marginEnd="16dp"
             android:background="@android:color/transparent"
             android:src="@drawable/ic_baseline_info_24"
+            android:tint="@android:color/white"
             android:contentDescription="Info" />
 
         <ImageButton
@@ -67,6 +68,7 @@
             android:layout_height="48dp"
             android:background="@android:color/transparent"
             android:src="@drawable/ic_baseline_flash_off_24"
+            android:tint="@android:color/white"
             android:contentDescription="Toggle Flash" />
 
 
@@ -94,6 +96,7 @@
                     android:layout_height="48dp"
                     android:background="@android:color/transparent"
                     android:src="@drawable/ic_baseline_camera_24"
+                    android:tint="@android:color/white"
                     android:scaleX="1.0"
                     android:scaleY="1.0"
                     android:contentDescription="Capture Photo" />
@@ -104,6 +107,7 @@
                     android:layout_height="48dp"
                     android:background="@android:color/transparent"
                     android:src="@drawable/ic_baseline_videocam_24"
+                    android:tint="@android:color/white"
                     android:scaleX="1.0"
                     android:scaleY="1.0"
                     android:contentDescription="Record Video" />
@@ -118,6 +122,7 @@
             android:layout_marginEnd="16dp"
             android:background="@android:color/transparent"
             android:src="@drawable/watch_screentime_35dp"
+            android:tint="@android:color/white"
             android:contentDescription="Open App" />
 
         <ImageButton
@@ -127,12 +132,10 @@
             android:layout_marginEnd="16dp"
             android:background="@android:color/transparent"
             android:src="@drawable/ic_baseline_flip_camera_24"
+            android:tint="@android:color/white"
             android:contentDescription="Flip Camera" />
 
-        <ImageView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            app:srcCompat="@drawable/watch_screentime_40dp" />
+
     </LinearLayout>
 
     <TextView
