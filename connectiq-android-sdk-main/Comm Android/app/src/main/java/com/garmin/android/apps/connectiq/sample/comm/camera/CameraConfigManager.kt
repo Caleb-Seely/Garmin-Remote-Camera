@@ -11,9 +11,11 @@ import com.google.common.util.concurrent.ListenableFuture
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import android.view.Surface
+import android.view.WindowManager
 
 /**
- * Manages camera configuration options like lens selection, flash,
+ * Manages camera configuration options like, location lens selection, flash,
  * and torch settings.
  */
 class CameraConfigManager(

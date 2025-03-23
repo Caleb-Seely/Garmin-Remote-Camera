@@ -16,6 +16,7 @@ object CameraLogger {
     const val VIDEO_CAPTURE = "$BASE_TAG-Video"
     const val CAMERA_CONFIG = "$BASE_TAG-Config"
     const val COUNTDOWN = "$BASE_TAG-Countdown"
+    const val METADATA_MANAGER = "$BASE_TAG-Metadata"
     
     fun d(tag: String, message: String, instance: Any? = null) {
         val instanceId = instance?.let { " [${System.identityHashCode(it)}]" } ?: ""

@@ -68,9 +68,16 @@ dependencies {
     implementation("androidx.camera:camera-video:${cameraxVersion}")
     implementation("androidx.camera:camera-extensions:${cameraxVersion}")
 
+    // ExifInterface for metadata handling
+    implementation("androidx.exifinterface:exifinterface:1.3.6")
+ 
     // Kotlin coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.9.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
 
     implementation("com.google.android.material:material:1.11.0")
+    
+    // MP4Parser for direct MP4 metadata manipulation
+    implementation("org.mp4parser:isoparser:1.9.41")
+    implementation("org.mp4parser:muxer:1.9.41")
 }

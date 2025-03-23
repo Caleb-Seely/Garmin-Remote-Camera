@@ -3,6 +3,8 @@ package com.garmin.android.apps.connectiq.sample.comm.camera
 import android.content.Context
 import android.os.Handler
 import android.os.Looper
+import android.view.Surface
+import android.view.WindowManager
 import android.widget.Toast
 import androidx.camera.core.Camera
 import androidx.camera.core.CameraSelector
@@ -29,7 +31,8 @@ class CameraInitializer(
     private val context: Context,
     private val lifecycleOwner: LifecycleOwner,
     private val viewFinder: PreviewView,
-    private val cameraState: CameraState
+    private val cameraState: CameraState,
+    private val videoCaptureManager: VideoCaptureManager? = null
 ) {
     private var camera: Camera? = null
     private var imageCapture: ImageCapture? = null
@@ -145,13 +148,46 @@ class CameraInitializer(
                 .build()
 
             // VideoCapture with high quality settings and audio enabled
-            val recorder = Recorder.Builder()
-                .setQualitySelector(QualitySelector.from(Quality.HIGHEST, FallbackStrategy.higherQualityOrLowerThan(Quality.SD)))
-                .build()
-            videoCapture = VideoCapture.withOutput(recorder)
+            // Try to use the configured video capture with metadata if available
+            videoCapture = if (videoCaptureManager != null) {
+                // Use VideoCaptureManager to create a configured video capture with metadata
+                val configuredVideoCapture = videoCaptureManager.createConfiguredVideoCapture()
+                if (configuredVideoCapture != null) {
+                    CameraLogger.d(CAMERA_INITIALIZER, "Using configured video capture with metadata support", this)
+                    configuredVideoCapture
+                } else {
+                    CameraLogger.d(CAMERA_INITIALIZER, "Falling back to default video capture", this)
+                    createDefaultVideoCapture()
+                }
+            } else {
+                CameraLogger.d(CAMERA_INITIALIZER, "Using default video capture (no VideoCaptureManager)", this)
+                createDefaultVideoCapture()
+            }
 
             // Bind use cases to camera
             try {
+                // If we have a video capture use case, manually set its target rotation
+                videoCapture?.let { videoCap ->
+                    // Get current device orientation
+                    val currentOrientation = try {
+                        val windowManager = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
+                        val rotation = windowManager.defaultDisplay.rotation
+                        CameraLogger.d(CAMERA_INITIALIZER, "Setting video target rotation to: $rotation", this)
+                        rotation
+                    } catch (e: Exception) {
+                        CameraLogger.e(CAMERA_INITIALIZER, "Error getting rotation, defaulting to 0", e, this)
+                        Surface.ROTATION_0
+                    }
+                    // We need to use reflection to set target rotation since the API might differ between versions
+                    try {
+                        val setCameraMethod = videoCap.javaClass.getDeclaredMethod("setTargetRotation", Int::class.java)
+                        setCameraMethod.invoke(videoCap, currentOrientation)
+                        CameraLogger.d(CAMERA_INITIALIZER, "Successfully set rotation via reflection", this)
+                    } catch (e: Exception) {
+                        CameraLogger.e(CAMERA_INITIALIZER, "Failed to set rotation via reflection", e, this)
+                    }
+                }
+
                 camera = cameraProvider.bindToLifecycle(
                     lifecycleOwner,
                     cameraSelector,
@@ -167,25 +203,26 @@ class CameraInitializer(
                 isCameraActive = true
                 CameraLogger.d(CAMERA_INITIALIZER, "Camera initialized and active with lensFacing=$lensFacing", this)
             } catch (exc: Exception) {
-                // If binding fails with all use cases, try with just the preview and image capture
-                CameraLogger.e(CAMERA_INITIALIZER, "Full use case binding failed, trying simplified binding", exc, this)
-                try {
-                    camera = cameraProvider.bindToLifecycle(
-                        lifecycleOwner,
-                        cameraSelector,
-                        preview,
-                        imageCapture
-                    )
-                    isCameraInitialized = true
-                    isCameraActive = true
-                    CameraLogger.d(CAMERA_INITIALIZER, "Simplified camera binding successful", this)
-                } catch (e: Exception) {
-                    handleCameraBindingError(e, cameraProvider)
-                }
+                CameraLogger.e(CAMERA_INITIALIZER, "Use case binding failed", exc, this)
+                Toast.makeText(context, "Failed to bind camera use cases: ${exc.message}", Toast.LENGTH_SHORT).show()
+                isCameraActive = false
+                // Try recovery with fewer use cases
+                handleCameraBindingError(exc, cameraProvider)
             }
-        } catch (exc: Exception) {
-            handleCameraBindingError(exc, cameraProvider)
+        } catch (e: Exception) {
+            CameraLogger.e(CAMERA_INITIALIZER, "Error binding camera", e, this)
+            isCameraActive = false
         }
+    }
+    
+    /**
+     * Create default video capture use case without metadata configuration
+     */
+    private fun createDefaultVideoCapture(): VideoCapture<Recorder> {
+        val recorder = Recorder.Builder()
+            .setQualitySelector(QualitySelector.from(Quality.HIGHEST, FallbackStrategy.higherQualityOrLowerThan(Quality.SD)))
+            .build()
+        return VideoCapture.withOutput(recorder)
     }
     
     /**

@@ -27,10 +27,13 @@ class CameraManager(
     // The central state repository
     private val cameraState = CameraState()
     
+    // Metadata manager for orientation and location data
+    private val metadataManager = MetadataManager(context)
+    
     // Component managers
-    private val cameraInitializer = CameraInitializer(context, lifecycleOwner, viewFinder, cameraState)
-    private val photoManager = PhotoCaptureManager(context, onPhotoTaken)
-    private val videoManager = VideoCaptureManager(context, cameraState, onRecordingStatusUpdate)
+    private val videoManager = VideoCaptureManager(context, cameraState, onRecordingStatusUpdate, metadataManager)
+    private val cameraInitializer = CameraInitializer(context, lifecycleOwner, viewFinder, cameraState, videoManager)
+    private val photoManager = PhotoCaptureManager(context, onPhotoTaken, metadataManager)
     private val configManager: CameraConfigManager by lazy { CameraConfigManager(context, cameraState, cameraInitializer) }
     
     // Countdown manager with callback to appropriate capture method

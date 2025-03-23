@@ -1,8 +1,8 @@
 pluginManagement {
     repositories {
-        gradlePluginPortal()
         google()
         mavenCentral()
+        gradlePluginPortal()
     }
 }
 
@@ -14,4 +14,5 @@ dependencyResolutionManagement {
     }
 }
 
+rootProject.name = "Comm Android"
 include(":app")
