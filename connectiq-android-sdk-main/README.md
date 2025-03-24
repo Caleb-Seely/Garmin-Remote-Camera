@@ -1,95 +1,63 @@
-# Connect IQ SDK for Android Samples
+# ClearShot - Garmin Watch Camera Control
 
-## Official documentation
+ClearShot is a dual-device application that enables you to control your Android phone's camera using a Garmin smartwatch.
 
-- Android Guide: [Connect IQ SDK for Android]
+## Project Components
 
-## SDK License
+### 1. ClearShot_Watch (Garmin App)
+The Garmin watch application serves as a remote control for your phone's camera. It provides a simple interface to trigger photos and videos from your wrist.
 
-- By downloading the SDK you agree to our [License Agreement].
+### 2. Comm Android (Android App)
+The Android companion app handles the camera operations on your phone. Due to Android's security restrictions on third-party camera access, this companion app is necessary to control the native camera functionality.
 
-## Download
+## Prerequisites
 
-#### AAR
+- A compatible Garmin smartwatch
+- An Android phone running Android 6.0 or higher
+- Garmin Connect IQ SDK
+- Android Studio
+- USB debugging enabled on your Android device
 
-Latest AAR is available for download on Maven Central Repository under [CIQ Companion APP SDK].
+## Installation
 
-#### MAVEN
+### Garmin Watch App (ClearShot_Watch)
+1. Connect your watch to your computer
+3. Drag the ClearShot_Watch app into the App folder 
+4. The app will appear in your watch's app list
 
-```
-<dependency>          
-    <groupId>com.garmin.connectiq</groupId>          
-    <artifactId>ciq-companion-app-sdk</artifactId>
-    <version>2.2.0</version>
-</dependency>
-```   
+### Android App (Comm Android)
+1. Enable USB debugging on your Android device
+2. Connect your phone to your computer
+3. Build and install the Comm Android app using Android Studio
+4. Grant necessary permissions (camera, storage) when prompted
 
-#### GRADLE
+## Usage
 
-```
-implementation("com.garmin.connectiq:ciq-companion-app-sdk:2.2.0@aar")
-```
+1. Launch the Comm Android app on your phone
+2. Open the ClearShot_Watch app on your Garmin watch
+3. The watch will connect to the phone automatically
+4. Use the watch interface to:
+   - Take photos
+   - Start/stop video recording
+   - Adjust delay
+   - Switch modes 
 
-## Samples
+## Features
 
-#### Comm Android Sample
-- The Comm Android application is a sample companion application for ConnectIQ on Android
-- Compile using Android Studio
-- Run on phone.
+- Remote camera control from your wrist
+- Photo capture
+- Video recording
+- Simple and intuitive interface
 
-#### Comm Watch Sample
-- The Comm Watch application is a sample application for ConnectIQ
-- Compile using Visual Studio Code https://developer.garmin.com/connect-iq/reference-guides/visual-studio-code-extension/
-- Generate PRG file or use [CommWatch.prg] (the already compiled app)
-- Copy PRG file to the watch
+## Technical Details
 
-## Other Useful Info
+The communication between the watch and phone is handled through Garmin's messaging system. The watch sends commands to the phone, which then executes the corresponding camera actions.
 
-### Forums:
-The [Connect IQ forum] provides access to our community of amazing developers, as well as the ear of the Connect IQ team, and includes several spaces for interaction:
+## Troubleshooting
 
-* [Connect IQ General Forum][Connect IQ Forum]: This is the main forum, and is the first stop for help and developer discussions.
-* [Connect IQ News & Announcements]: Keep up to date with the latest official SDK news from the Connect IQ team.
-* [Connect IQ App Ideas]: Post app ideas, or if you're a developer, find potential projects to work on.
-* [Connect IQ Showcase]: A place for developers to field questions about their apps and and address issues reported by their user base.
-* [Connect IQ Bug Reports]: This is where we talk about what's broken and how we plan to fix it.
-* [Connect IQ Wiki]: A wiki hosted on the forums that contains FAQs and other useful info.
+If you experience connection issues:
+1. Ensure both devices are within range
+2. Restart both applications
+3. Check if the necessary permissions are granted on the Android app
+4. Verify that developer mode is properly enabled on both devices
 
-Please be sure to refer to the <a href="https://forums.garmin.com/developer/connect-iq/w/wiki/2/forum-rules">forum rules</a> when using the general forums and the <a href="https://forums.garmin.com/developer/connect-iq/w/wiki/5/bug-reports-faq">bug reports forum rules</a> when posting to the bug reports forum.
-
-### Helpful Links:
-* [Connect IQ Programmer's Guide]: This guide covers first time setup and discusses many key Connect IQ concepts.
-* [Connect IQ User Experience Guide]: A supplemental guide that contains suggestions for getting the most out of your apps on wearable products.
-* [Connect IQ API Documentation]: Full technical documentation of Connect IQ APIs.
-* [Connect IQ Store]: Explore and download apps to personalize the Garmin with Connect IQ, our open platform for third-party developer apps.
-* [Garmin Connect]: Garmin Connect provides users with a dashboard and tools for review their fitness activites, including custom data from Connect IQ apps.
-* [Garmin Product Support]: The official Garmin product support online hub for basic device troubleshooting and non-Connect IQ related issues with Garmin products.
-* [garmin.com]: Your one-stop place for all things Garmin.
-* [Third-Party Tutorials and Open Source Apps]: This forum thread provides links to tutorials and open source projects that developers in the our community find helpful.
-
-## License
-
-Samples [License].
-
-
-[Connect IQ Forum]: https://forums.garmin.com/developer/connect-iq/
-[Connect IQ News & Announcements]: https://forums.garmin.com/developer/connect-iq/b/news-announcements
-[Connect IQ App Ideas]: https://forums.garmin.com/developer/connect-iq/f/app-ideas
-[Connect IQ Showcase]: https://forums.garmin.com/developer/connect-iq/f/showcase
-[Connect IQ Bug Reports]: https://forums.garmin.com/developer/connect-iq/i/bug-reports
-[Connect IQ Wiki]: https://forums.garmin.com/developer/connect-iq/w/wiki
-[Connect IQ Programmer's Guide]: https://developer.garmin.com/connect-iq/connect-iq-basics/
-[Connect IQ User Experience Guide]: https://developer.garmin.com/connect-iq/user-experience-guidelines/
-[Connect IQ API Documentation]: https://developer.garmin.com/connect-iq/api-docs/
-[Connect IQ Store]: https://apps.garmin.com/
-[Garmin Connect]: https://connect.garmin.com
-[Garmin Product Support]: https://support.garmin.com/
-[garmin.com]: https://www.garmin.com/
-[Third-Party Tutorials and Open Source Apps]: https://forums.garmin.com/developer/connect-iq/f/discussion/7961/overview-of-connect-iq-apps-accompanied-with-source-code
-
-[Connect IQ SDK for Android]: https://developer.garmin.com/connect-iq/core-topics/mobile-sdk-for-android/
-
-[CommWatch.prg]: https://github.com/garmin/connectiq-android-sdk/blob/master/CommWatch.prg
-[License]: https://github.com/garmin/connectiq-android-sdk/blob/master/LICENSE.md
-[License Agreement]: https://developer.garmin.com/downloads/connect-iq/sdks/agreement.html
-[CIQ Companion APP SDK]: https://central.sonatype.com/artifact/com.garmin.connectiq/ciq-companion-app-sdk/
