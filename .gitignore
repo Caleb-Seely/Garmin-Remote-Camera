@@ -12,7 +12,6 @@ monkey.jungle
 *.prg.debug.xml.tmp
 
 # Android specific
-*.apk
 *.ap_
 *.aab
 *.dex
