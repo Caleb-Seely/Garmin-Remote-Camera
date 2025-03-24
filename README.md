@@ -12,7 +12,7 @@ The Garmin watch application serves as a remote control for your phone's camera.
 ### 2. ClearShot_App (Android App)
 The Android companion app handles the camera operations on your phone. Due to Android's security restrictions on third-party camera access, this companion app is necessary to control the native camera functionality.
 
-[Sideload the Android app here]([/ClearShot_App/release/app-release.apk](https://github.com/Caleb-Seely/Garmin-Remote-Camera/blob/main/ClearShot_App/release/app-release.apk))
+[Sideload the Android app here](https://github.com/Caleb-Seely/Garmin-Remote-Camera/blob/main/ClearShot_App/release/app-release.apk)
 
 
 ## Installation
