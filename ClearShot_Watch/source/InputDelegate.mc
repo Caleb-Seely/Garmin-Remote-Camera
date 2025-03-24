@@ -24,10 +24,7 @@ class InputDelegate extends WatchUi.BehaviorDelegate {
     function onPreviousPage() {
         try {
             if (AppState.page == 0) {
-   // Now start recording
-      RecordingManager.startRecording();
-      AppState.page = 2;  // Set directly to recording page
-      RecordingManager.wasRecordingActive = false;  // Ensure this flag is reset
+                decrementSelectedIndex();
                 WatchUi.requestUpdate();
                 System.println("Previous Page (UP)");
                 return true;

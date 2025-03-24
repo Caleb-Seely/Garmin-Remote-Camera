@@ -189,6 +189,7 @@ class DeviceActivity : AppCompatActivity() {
 
         // Observe device connection state
         viewModel.isDeviceConnected.observe(this, Observer { isConnected ->
+            Log.d(TAG, "Connection state changed to: $isConnected")
             updateActionBarTitle(isConnected)
         })
 
@@ -327,15 +328,19 @@ class DeviceActivity : AppCompatActivity() {
     }
 
     fun updateActionBarTitle(isConnected: Boolean) {
+        Log.d(TAG, "updateActionBarTitle called with isConnected=$isConnected")
         val prefix = "ClearShot | "
         val deviceName = device.friendlyName
         val fullTitle = prefix + deviceName
         
         val spannableTitle = SpannableString(fullTitle)
-        val deviceNameColor = if (isConnected) 
-                        ContextCompat.getColor(this, android.R.color.holo_green_light)
-                     else 
-                        ContextCompat.getColor(this, android.R.color.holo_red_light)
+        val deviceNameColor = if (isConnected) {
+            Log.d(TAG, "Setting title color to green")
+            ContextCompat.getColor(this, android.R.color.holo_green_light)
+        } else {
+            Log.d(TAG, "Setting title color to red")
+            ContextCompat.getColor(this, android.R.color.holo_red_light)
+        }
         
         // Apply color span only to the device name portion
         spannableTitle.setSpan(
@@ -345,20 +350,31 @@ class DeviceActivity : AppCompatActivity() {
             Spannable.SPAN_INCLUSIVE_INCLUSIVE
         )
         
-        supportActionBar?.title = spannableTitle
+        supportActionBar?.let { actionBar ->
+            actionBar.title = spannableTitle
+        }
     }
 
     override fun onResume() {
         super.onResume()
+        Log.d(TAG, "onResume: Registering for app events")
+        
+        // First register for events
         viewModel.registerForAppEvents()
         
-        // Add a delay to ensure the UI is ready before restarting the camera
+        // Then check current connection state and update UI
         Handler(Looper.getMainLooper()).postDelayed({
             if (!isFinishing) {
                 try {
+                    // Check current connection state from LiveData
+                    val isConnected = viewModel.isDeviceConnected.value ?: false
+                    Log.d(TAG, "onResume: Current connection state: $isConnected")
+                    updateActionBarTitle(isConnected)
+                    
+                    // Start camera
                     viewModel.startCamera()
                 } catch (e: Exception) {
-                    Log.e(TAG, "Error starting camera in onResume", e)
+                    Log.e(TAG, "Error in onResume", e)
                 }
             }
         }, 300)
@@ -366,6 +382,7 @@ class DeviceActivity : AppCompatActivity() {
 
     override fun onPause() {
         super.onPause()
+        Log.d(TAG, "onPause: Unregistering events")
         
         // Properly clean up before pausing
         try {
@@ -377,6 +394,7 @@ class DeviceActivity : AppCompatActivity() {
 
     override fun onStop() {
         super.onStop()
+        Log.d(TAG, "onStop: Shutting down")
         
         // When activity is stopped (not visible), shut down camera to free resources
         try {

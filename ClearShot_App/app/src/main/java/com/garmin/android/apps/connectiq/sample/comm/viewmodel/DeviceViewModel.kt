@@ -13,6 +13,7 @@ import com.garmin.android.apps.connectiq.sample.comm.camera.CameraState
 import com.garmin.android.apps.connectiq.sample.comm.camera.CameraManager
 import com.garmin.android.apps.connectiq.sample.comm.connectiq.ConnectIQManager
 import com.garmin.android.apps.connectiq.sample.comm.ui.StatusMessages
+import com.garmin.android.apps.connectiq.sample.comm.utils.Constants
 import com.garmin.android.connectiq.IQApp
 import com.garmin.android.connectiq.IQDevice
 
@@ -23,7 +24,6 @@ import com.garmin.android.connectiq.IQDevice
 class DeviceViewModel(application: Application) : AndroidViewModel(application) {
     companion object {
         private const val TAG = "DeviceViewModel"
-        private const val COMM_WATCH_ID = "a3421feed289106a538cb9547ab12095"
     }
 
     // Camera state
@@ -53,7 +53,7 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
     private var isCountdownCancelled = false
     private var recordingStartTime: Long = 0
     
-    private val myApp: IQApp = IQApp(COMM_WATCH_ID)
+    private val myApp: IQApp = IQApp(Constants.COMM_WATCH_ID)
     private var device: IQDevice? = null
 
     /**
@@ -136,15 +136,43 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
                 context,
                 device,
                 onStatusUpdate = { status ->
-                    if (status == "MODE_SWAP") {
-                        Log.d(TAG, "Received MODE_SWAP command")
-                        
-                        // No need to toggle the camera mode here as it will be toggled
-                        // in handlePhotoRequest based on the request code
-                        // Just update the status message
-                        _statusMessage.postValue("Mode swap in progress...")
-                    } else {
-                        _statusMessage.postValue(status)
+                    when (status) {
+                        StatusMessages.MODE_SWAP_IN_PROGRESS -> {
+                            Log.d(TAG, "Received MODE_SWAP command")
+                            _statusMessage.postValue(status)
+                        }
+                        StatusMessages.APP_RUNNING,
+                        StatusMessages.APP_PROMPT_SHOWN,
+                        StatusMessages.MESSAGE_SENT,
+                        StatusMessages.CONNECTION_RESTORED -> {
+                            // These are temporary success messages that should timeout
+                            _statusMessage.postValue(status)
+                            handler.postDelayed({
+                                updateStatusWithTimeout(
+                                    if (_isVideoMode.value == true) StatusMessages.VIDEO_READY 
+                                    else StatusMessages.CAMERA_READY
+                                )
+                            }, 1500)
+                        }
+                        StatusMessages.CONNECTION_LOST,
+                        StatusMessages.DEVICE_NOT_CONNECTED,
+                        StatusMessages.CONNECTIQ_NOT_READY,
+                        StatusMessages.SERVICE_UNAVAILABLE,
+                        StatusMessages.APP_OPEN_FAILED,
+                        StatusMessages.ERROR_SENDING_MESSAGE -> {
+                            // These are error messages that should timeout
+                            _statusMessage.postValue(status)
+                            handler.postDelayed({
+                                updateStatusWithTimeout(
+                                    if (_isVideoMode.value == true) StatusMessages.VIDEO_READY 
+                                    else StatusMessages.CAMERA_READY
+                                )
+                            }, 3000) // Longer timeout for error messages
+                        }
+                        else -> {
+                            // For all other messages, just update the status
+                            _statusMessage.postValue(status)
+                        }
                     }
                 },
                 onConnectionUpdate = { isConnected ->

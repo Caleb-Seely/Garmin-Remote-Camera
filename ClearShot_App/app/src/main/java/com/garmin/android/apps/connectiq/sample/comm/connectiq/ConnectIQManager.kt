@@ -3,6 +3,8 @@ package com.garmin.android.apps.connectiq.sample.comm.connectiq
 import android.content.Context
 import android.util.Log
 import com.garmin.android.apps.connectiq.sample.comm.camera.CameraManager
+import com.garmin.android.apps.connectiq.sample.comm.ui.StatusMessages
+import com.garmin.android.apps.connectiq.sample.comm.utils.Constants
 import com.garmin.android.connectiq.ConnectIQ
 import com.garmin.android.connectiq.IQApp
 import com.garmin.android.connectiq.IQDevice
@@ -23,16 +25,31 @@ class ConnectIQManager(
 ) {
     companion object {
         private const val TAG = "ConnectIQManager"
-        private const val COMM_WATCH_ID = "a3421feed289106a538cb9547ab12095"
     }
 
-    private val connectIQ: ConnectIQ = ConnectIQ.getInstance()
-    private val myApp: IQApp = IQApp(COMM_WATCH_ID)
+    private val connectIQ: ConnectIQ = ConnectIQ.getInstance(context, ConnectIQ.IQConnectType.WIRELESS)
+    private val myApp: IQApp = IQApp(Constants.COMM_WATCH_ID)
     private var appIsOpen = false
 
     private val openAppListener = ConnectIQ.IQOpenApplicationListener { _, _, status ->
         appIsOpen = status == ConnectIQ.IQOpenApplicationStatus.APP_IS_ALREADY_RUNNING
         Log.d(TAG, "App open status: $appIsOpen")
+        
+        // Log detailed app status
+        when (status) {
+            ConnectIQ.IQOpenApplicationStatus.APP_IS_ALREADY_RUNNING -> {
+                Log.d(TAG, "App is already running on device")
+                onStatusUpdate(StatusMessages.APP_RUNNING)
+            }
+            ConnectIQ.IQOpenApplicationStatus.PROMPT_SHOWN_ON_DEVICE -> {
+                Log.d(TAG, "Prompt shown on device to open app")
+                onStatusUpdate(StatusMessages.APP_PROMPT_SHOWN)
+            }
+            else -> {
+                Log.w(TAG, "App not opened: $status")
+                onStatusUpdate(StatusMessages.APP_OPEN_FAILED)
+            }
+        }
     }
 
     /**
@@ -40,17 +57,38 @@ class ConnectIQManager(
      */
     fun openApp() {
         Log.d(TAG, "Opening app on device: ${device.friendlyName}")
+
+        // First check if the device is connected
+        if (!isDeviceConnected()) {
+            Log.w(TAG, "Cannot open app: Device not connected")
+            onStatusUpdate(StatusMessages.DEVICE_NOT_CONNECTED)
+            onConnectionUpdate(false)
+            return
+        }
+
         try {
-            connectIQ.openApplication(device, myApp, openAppListener)
+            // Check if the device supports the app
+            // Note: We don't use getApplicationInfo as it may not be available in all SDK versions
+            val status = connectIQ.getDeviceStatus(device)
+            Log.d(TAG, "Device status: $status")
+
+            // Only proceed if the device is connected
+            if (status == IQDevice.IQDeviceStatus.CONNECTED) {
+                connectIQ.openApplication(device, myApp, openAppListener)
+            } else {
+                Log.w(TAG, "Device not connected, cannot open app. Status: $status")
+                onStatusUpdate(StatusMessages.DEVICE_NOT_CONNECTED)
+                onConnectionUpdate(false)
+            }
         } catch (e: InvalidStateException) {
             Log.e(TAG, "Error opening app: ConnectIQ not in valid state", e)
-            onStatusUpdate("Error: ConnectIQ not ready")
+            onStatusUpdate(StatusMessages.CONNECTIQ_NOT_READY)
         } catch (e: ServiceUnavailableException) {
             Log.e(TAG, "Error opening app: Service unavailable", e)
-            onStatusUpdate("Error: ConnectIQ service unavailable")
+            onStatusUpdate(StatusMessages.SERVICE_UNAVAILABLE)
         } catch (e: Exception) {
             Log.e(TAG, "Unexpected error opening app", e)
-            onStatusUpdate("Error opening app: ${e.message}")
+            onStatusUpdate(StatusMessages.APP_OPEN_FAILED)
         }
     }
 
@@ -59,10 +97,37 @@ class ConnectIQManager(
      */
     fun registerForAppEvents() {
         try {
+            Log.d(TAG, "Registering for app events for device: ${device.friendlyName}")
+            
+            // First check current connection state
+            val currentStatus = connectIQ.getDeviceStatus(device)
+            Log.d(TAG, "Initial device status: ${currentStatus?.name}")
+            onConnectionUpdate(currentStatus == IQDevice.IQDeviceStatus.CONNECTED)
+            
             // Register for device status updates
             connectIQ.registerForDeviceEvents(device) { device, status ->
-                Log.d(TAG, "Device status changed: ${status.name}")
-                onConnectionUpdate(status == IQDevice.IQDeviceStatus.CONNECTED)
+                Log.d(TAG, "Device status changed: ${status.name} for device: ${device.friendlyName}")
+                
+                // Log detailed device connection information
+                when (status) {
+                    IQDevice.IQDeviceStatus.CONNECTED -> {
+                        Log.d(TAG, "Device connected: ${device.friendlyName} [${device.deviceIdentifier}]")
+                        onStatusUpdate(StatusMessages.CONNECTION_RESTORED)
+                        onConnectionUpdate(true)
+                    }
+                    IQDevice.IQDeviceStatus.NOT_CONNECTED -> {
+                        Log.d(TAG, "Device disconnected: ${device.friendlyName}")
+                        onStatusUpdate(StatusMessages.CONNECTION_LOST)
+                        onConnectionUpdate(false)
+                    }
+                    else -> {
+                        Log.d(TAG, "Device status: ${status.name} for ${device.friendlyName}")
+                        // For other states, we should check if the device is actually connected
+                        val currentStatus = connectIQ.getDeviceStatus(device)
+                        Log.d(TAG, "Current device status from getDeviceStatus: ${currentStatus?.name}")
+                        onConnectionUpdate(currentStatus == IQDevice.IQDeviceStatus.CONNECTED)
+                    }
+                }
             }
 
             connectIQ.registerForAppEvents(device, myApp) { _, _, message, _ ->
@@ -86,10 +151,10 @@ class ConnectIQManager(
             }
         } catch (e: InvalidStateException) {
             Log.e(TAG, "ConnectIQ is not in a valid state", e)
-            onStatusUpdate("Error: ConnectIQ not ready")
+            onStatusUpdate(StatusMessages.CONNECTIQ_NOT_READY)
         } catch (e: Exception) {
             Log.e(TAG, "Error registering for app events", e)
-            onStatusUpdate("Error: Failed to connect to device")
+            onStatusUpdate(StatusMessages.CONNECTION_LOST)
         }
     }
 
@@ -125,7 +190,7 @@ class ConnectIQManager(
 
                 // Notify that a mode swap occurred (this will be observed in the ViewModel)
                 Log.d(TAG, "Mode swap command received, sending MODE_SWAP notification")
-                onStatusUpdate("MODE_SWAP")
+                onStatusUpdate(StatusMessages.MODE_SWAP_IN_PROGRESS)
                 
                 // Get current mode - but DON'T toggle here, let the ViewModel handle it
                 val isCurrentlyVideoMode = cameraManager.isVideoMode()
@@ -170,24 +235,24 @@ class ConnectIQManager(
      */
     private fun updateStatusText(requestCode: Int) {
         val statusMessage = when {
-            requestCode == -1 -> "Cancelled request"
-            requestCode == -100 -> "Swapping to video mode"
+            requestCode == -1 -> StatusMessages.RECORDING_CANCELLED
+            requestCode == -100 -> StatusMessages.VIDEO_MODE
             requestCode < -100 -> {
                 val delay = -(requestCode + 100)
-                "Swapping to video mode, recording in $delay seconds"
+                "Starting video recording in $delay seconds"
             }
-            requestCode == 100 -> "Swapping to photo mode"
+            requestCode == 100 -> StatusMessages.PHOTO_MODE
             requestCode > 100 -> {
                 val delay = requestCode - 100
-                "Swapping to photo mode, photo in $delay seconds"
+                "Taking photo in $delay seconds"
             }
-            requestCode == -2 -> "Starting recording"
+            requestCode == -2 -> StatusMessages.RECORDING_STARTED
             requestCode < -2 -> {
                 val delay = -(requestCode + 3)
                 "Starting recording in $delay seconds"
             }
             requestCode > 0 -> "Taking photo in $requestCode seconds"
-            else -> "Taking photo..."
+            else -> StatusMessages.TAKING_PHOTO
         }
         onStatusUpdate(statusMessage)
     }
@@ -199,16 +264,17 @@ class ConnectIQManager(
         try {
             connectIQ.sendMessage(device, myApp, message) { _, _, status ->
                 Log.d(TAG, "Message sent: ${status.name}")
+                onStatusUpdate(StatusMessages.MESSAGE_SENT)
             }
         } catch (e: InvalidStateException) {
             Log.e(TAG, "Error sending message: ConnectIQ not in valid state", e)
-            onStatusUpdate("Error: ConnectIQ not ready")
+            onStatusUpdate(StatusMessages.CONNECTIQ_NOT_READY)
         } catch (e: ServiceUnavailableException) {
             Log.e(TAG, "Error sending message: Service unavailable", e)
-            onStatusUpdate("Error: Service unavailable")
+            onStatusUpdate(StatusMessages.SERVICE_UNAVAILABLE)
         } catch (e: Exception) {
             Log.e(TAG, "Unexpected error sending message", e)
-            onStatusUpdate("Error sending message: ${e.message}")
+            onStatusUpdate(StatusMessages.ERROR_SENDING_MESSAGE)
         }
     }
 
@@ -217,12 +283,10 @@ class ConnectIQManager(
      */
     fun unregisterForEvents() {
         try {
-            connectIQ.unregisterForApplicationEvents(device, myApp)
+            Log.d(TAG, "Unregistering events for device: ${device.friendlyName}")
             connectIQ.unregisterForDeviceEvents(device)
-        } catch (e: InvalidStateException) {
-            Log.e(TAG, "Error unregistering for events", e)
         } catch (e: Exception) {
-            Log.e(TAG, "Unexpected error unregistering for events", e)
+            Log.e(TAG, "Error unregistering events", e)
         }
     }
 

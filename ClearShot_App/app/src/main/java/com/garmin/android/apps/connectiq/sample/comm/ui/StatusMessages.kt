@@ -37,6 +37,13 @@ object StatusMessages {
     const val CONNECTION_RESTORED = "Device connection restored"
     const val MESSAGE_SENT = "Message sent to device"
     const val ERROR_SENDING_MESSAGE = "Failed to send message"
-
-
+    
+    // ConnectIQ app states
+    const val APP_RUNNING = "App is running"
+    const val APP_PROMPT_SHOWN = "Prompting watch"
+    const val APP_OPEN_FAILED = "Failed to open app"
+    const val DEVICE_NOT_CONNECTED = "Device not connected"
+    const val CONNECTIQ_NOT_READY = "ConnectIQ not ready"
+    const val SERVICE_UNAVAILABLE = "ConnectIQ service unavailable"
+    const val MODE_SWAP_IN_PROGRESS = "Switching modes"
 } 
