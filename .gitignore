@@ -17,7 +17,6 @@ monkey.jungle
 *.dex
 
 # Generated files
-bin/
 gen/
 out/
 build/
