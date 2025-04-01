@@ -29,7 +29,7 @@
 
     <string name="requirements_title">Requirements</string>
     <string name="requirements_content">ClearShot requires the companion Garmin watch app to function. You can download the Garmin app from the Garmin IQ Store.</string>
-    <string name="requirements_note">Note: Due to Android system restrictions, it is not possible to programmatically trigger the native camera app. ClearShot uses its own camera functionality to capture photos and videos.</string>
+    <string name="requirements_note">Note: Due to Android system restrictions, it is not possible to programmatically trigger the native camera app. ClearShot provides its own optimized camera functionality to ensure a smooth and reliable experience capturing photos and videos.</string>
 
     <string name="watch_controls_title">Watch Controls</string>
     <string name="button_layout_title">Button Layout</string>

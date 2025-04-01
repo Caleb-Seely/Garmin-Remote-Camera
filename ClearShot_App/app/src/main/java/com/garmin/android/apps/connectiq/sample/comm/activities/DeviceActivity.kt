@@ -50,7 +50,8 @@ class DeviceActivity : AppCompatActivity() {
             mutableListOf(
                 Manifest.permission.CAMERA,
                 Manifest.permission.RECORD_AUDIO,
-                Manifest.permission.ACCESS_FINE_LOCATION
+                Manifest.permission.ACCESS_FINE_LOCATION,
+                Manifest.permission.ACCESS_COARSE_LOCATION
             ).apply {
                 if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.P) {
                     add(Manifest.permission.WRITE_EXTERNAL_STORAGE)
@@ -58,7 +59,6 @@ class DeviceActivity : AppCompatActivity() {
                     // For Android 10+ we need these instead of WRITE_EXTERNAL_STORAGE
                     add(Manifest.permission.READ_MEDIA_VIDEO)
                     add(Manifest.permission.READ_MEDIA_IMAGES)
-                    add(Manifest.permission.ACCESS_MEDIA_LOCATION)
                 }
             }.toTypedArray()
 
@@ -106,8 +106,8 @@ class DeviceActivity : AppCompatActivity() {
             // Set up click listeners
             setupClickListeners()
 
-            // Check permissions and start camera if granted
-            if (allPermissionsGranted()) {
+            // Check required permissions and start camera if granted
+            if (allRequiredPermissionsGranted()) {
                 viewModel.startCamera()
             } else {
                 ActivityCompat.requestPermissions(
@@ -420,9 +420,9 @@ class DeviceActivity : AppCompatActivity() {
 
     /**
      * Checks if all required permissions are granted
-     * @return true if all permissions are granted, false otherwise
+     * @return true if all required permissions are granted, false otherwise
      */
-    private fun allPermissionsGranted(): Boolean {
+    private fun allRequiredPermissionsGranted(): Boolean {
         return REQUIRED_PERMISSIONS.all {
             ContextCompat.checkSelfPermission(baseContext, it) == PackageManager.PERMISSION_GRANTED
         }
@@ -435,7 +435,15 @@ class DeviceActivity : AppCompatActivity() {
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == REQUEST_CODE_PERMISSIONS) {
-            if (allPermissionsGranted()) {
+            // Check if camera and audio permissions are granted (these are required)
+            val requiredPermissionsGranted = REQUIRED_PERMISSIONS.filter {
+                it != Manifest.permission.ACCESS_FINE_LOCATION && 
+                it != Manifest.permission.ACCESS_COARSE_LOCATION
+            }.all {
+                ContextCompat.checkSelfPermission(baseContext, it) == PackageManager.PERMISSION_GRANTED
+            }
+
+            if (requiredPermissionsGranted) {
                 try {
                     viewModel.startCamera()
                 } catch (e: Exception) {

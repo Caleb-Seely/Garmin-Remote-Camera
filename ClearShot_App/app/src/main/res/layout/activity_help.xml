@@ -168,7 +168,6 @@
             android:layout_height="wrap_content"
             android:text="@string/github_repository_link"
             android:textColor="@android:color/holo_blue_dark"
-            android:padding="4dp"
             android:background="?android:attr/selectableItemBackground"
             android:layout_marginBottom="0dp"/>
 
@@ -179,7 +178,6 @@
             android:layout_height="wrap_content"
             android:text="@string/personal_website_link"
             android:textColor="@android:color/holo_blue_dark"
-            android:padding="4dp"
             android:background="?android:attr/selectableItemBackground"
             android:layout_marginBottom="8dp"/>
 
