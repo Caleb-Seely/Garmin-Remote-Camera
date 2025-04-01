@@ -1,6 +1,6 @@
 # Garmin Connect IQ specific
-/bin/*
-!/bin/ClearShot_Watch.prg
+ClearShot_Watch/bin/*
+!ClearShot_Watch/bin/ClearShot_Watch.prg
 /build/
 /release/
 *.prg
