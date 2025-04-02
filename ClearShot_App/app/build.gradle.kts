@@ -6,7 +6,7 @@ plugins {
 val compileSdkVersion: String by project
 val minSdkVersion: String by project
 val targetSdkVersion: String by project
-val packageName = "com.garmin.android.apps.connectiq.sample.comm"
+val packageName = "com.garmin.android.apps.clearshot.phone"
 val versionCode: String by project
 val versionName: String by project
 

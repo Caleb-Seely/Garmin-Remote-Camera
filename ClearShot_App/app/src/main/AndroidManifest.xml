@@ -34,7 +34,7 @@
 
         <provider
             android:name="androidx.core.content.FileProvider"
-            android:authorities="com.garmin.android.apps.connectiq.sample.comm.fileprovider"
+            android:authorities="com.garmin.android.apps.clearshot.phone.fileprovider"
             android:exported="false"
             android:grantUriPermissions="true">
             <meta-data
