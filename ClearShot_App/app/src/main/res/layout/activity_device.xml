@@ -4,12 +4,15 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    tools:context="com.garmin.android.apps.connectiq.sample.comm.activities.MainActivity">
+    android:background="@android:color/black"
+    tools:context="com.garmin.android.apps.clearshot.phone.activities.MainActivity">
 
     <androidx.camera.view.PreviewView
         android:id="@+id/viewFinder"
         android:layout_width="0dp"
         android:layout_height="0dp"
+        app:scaleType="fitCenter"
+
         app:layout_constraintBottom_toTopOf="@id/bottom_control_bar"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"

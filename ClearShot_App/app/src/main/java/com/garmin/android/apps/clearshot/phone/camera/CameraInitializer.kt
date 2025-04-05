@@ -25,6 +25,8 @@ import java.util.concurrent.Executors
 import android.util.Size
 import androidx.camera.core.resolutionselector.ResolutionSelector
 import androidx.camera.core.resolutionselector.ResolutionStrategy
+import androidx.camera.core.AspectRatio
+import androidx.camera.core.resolutionselector.AspectRatioStrategy
 
 /**
  * Responsible for initializing and binding the camera for use.
@@ -134,17 +136,44 @@ class CameraInitializer(
                 return
             }
             
-            // Preview with high quality settings
+            // Preview with high quality settings and matching aspect ratio
             val preview = Preview.Builder()
                 .setTargetRotation(viewFinder.display.rotation)
+                .setResolutionSelector(
+                    ResolutionSelector.Builder()
+                        .setAspectRatioStrategy(AspectRatioStrategy.RATIO_4_3_FALLBACK_AUTO_STRATEGY)
+                        .build()
+                )
                 .build()
                 .also {
                     it.setSurfaceProvider(viewFinder.surfaceProvider)
                 }
 
-            // ImageCapture with maximum quality settings
+            // Calculate and set preview dimensions to eliminate side bars
+            viewFinder.post {
+                val displayMetrics = context.resources.displayMetrics
+                val screenWidth = displayMetrics.widthPixels
+                
+                // Calculate a height that's more than 4:3 to eliminate side bars
+                // Using a ratio closer to 3:4 for height (inverting the aspect ratio to prioritize height)
+                val height = (screenWidth * 4) / 3  // This makes it much taller
+                
+                val params = viewFinder.layoutParams
+                params.height = height
+                viewFinder.layoutParams = params
+                
+                // Set scale type to adjust for the larger calculated height
+                viewFinder.scaleType = PreviewView.ScaleType.FILL_CENTER
+            }
+
+            // ImageCapture with maximum quality settings and matching aspect ratio
             val imageCaptureBuilder = ImageCapture.Builder()
                 .setTargetRotation(viewFinder.display.rotation)
+                .setResolutionSelector(
+                    ResolutionSelector.Builder()
+                        .setAspectRatioStrategy(AspectRatioStrategy.RATIO_4_3_FALLBACK_AUTO_STRATEGY)
+                        .build()
+                )
                 .setCaptureMode(ImageCapture.CAPTURE_MODE_MAXIMIZE_QUALITY)
                 .setFlashMode(if (cameraState.isFlashEnabled) ImageCapture.FLASH_MODE_ON else ImageCapture.FLASH_MODE_OFF)
                 .setJpegQuality(100)
