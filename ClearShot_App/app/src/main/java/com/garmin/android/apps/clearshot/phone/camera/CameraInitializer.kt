@@ -22,6 +22,9 @@ import androidx.lifecycle.LifecycleOwner
 import com.garmin.android.apps.clearshot.phone.camera.CameraLogger.CAMERA_INITIALIZER
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import android.util.Size
+import androidx.camera.core.resolutionselector.ResolutionSelector
+import androidx.camera.core.resolutionselector.ResolutionStrategy
 
 /**
  * Responsible for initializing and binding the camera for use.
@@ -140,12 +143,45 @@ class CameraInitializer(
                 }
 
             // ImageCapture with maximum quality settings
-            imageCapture = ImageCapture.Builder()
+            val imageCaptureBuilder = ImageCapture.Builder()
                 .setTargetRotation(viewFinder.display.rotation)
                 .setCaptureMode(ImageCapture.CAPTURE_MODE_MAXIMIZE_QUALITY)
                 .setFlashMode(if (cameraState.isFlashEnabled) ImageCapture.FLASH_MODE_ON else ImageCapture.FLASH_MODE_OFF)
                 .setJpegQuality(100)
-                .build()
+
+            // Only configure highest resolution for back camera
+            if (!cameraState.isFrontCamera) {
+                try {
+                    val cameraManager = context.getSystemService(Context.CAMERA_SERVICE) as android.hardware.camera2.CameraManager
+                    val cameraId = cameraManager.cameraIdList.firstOrNull { id ->
+                        val characteristics = cameraManager.getCameraCharacteristics(id)
+                        characteristics.get(android.hardware.camera2.CameraCharacteristics.LENS_FACING) == 
+                            android.hardware.camera2.CameraCharacteristics.LENS_FACING_BACK
+                    }
+
+                    if (cameraId != null) {
+                        val characteristics = cameraManager.getCameraCharacteristics(cameraId)
+                        val map = characteristics.get(android.hardware.camera2.CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
+                        val jpegSizes = map?.getOutputSizes(android.graphics.ImageFormat.JPEG)
+                        val highestResolution = jpegSizes?.maxByOrNull { it.width * it.height }
+
+                        if (highestResolution != null) {
+                            CameraLogger.d(CAMERA_INITIALIZER, "Using highest back camera resolution: $highestResolution", this)
+                            imageCaptureBuilder.setResolutionSelector(
+                                ResolutionSelector.Builder()
+                                    .setResolutionStrategy(
+                                        ResolutionStrategy(highestResolution, ResolutionStrategy.FALLBACK_RULE_CLOSEST_HIGHER)
+                                    )
+                                    .build()
+                            )
+                        }
+                    }
+                } catch (e: Exception) {
+                    CameraLogger.e(CAMERA_INITIALIZER, "Error configuring back camera resolution: ${e.message}", e, this)
+                }
+            }
+
+            imageCapture = imageCaptureBuilder.build()
 
             // VideoCapture with high quality settings and audio enabled
             // Try to use the configured video capture with metadata if available
