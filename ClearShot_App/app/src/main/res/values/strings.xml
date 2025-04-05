@@ -7,15 +7,19 @@
 
     <string name="app_name">ClearShot</string>
 
-    <string name="camera_ready">Camera ready</string>
-    <string name="tap_to_send">Test Msg</string>
-    <string name="open_app_open">Watch App</string>
-    <string name="flip_camera">Flip Camera</string>
+<!-- Btn Descriptions-->
+    <string name="flip_camera_description">Flip Camera</string>
+    <string name="toggle_flash_description">Toggle Flash</string>
+    <string name="watch_app_description">Watch App</string>
+    <string name="record_video_description">Record Video</string>
+    <string name="capture_photo_description">Capture Photo</string>
+    <string name="info_description">Info Menu</string>
 
+<!--Status messages-->
+    <string name="camera_ready">Camera ready</string>
     <string name="load_devices">Reload Devices</string>
     <string name="initialization_error">Failed to initalize the SDK.\n</string>
     <string name="service_unavailable">The ConnectIQ service is unavailabe.</string>
-    <string name="open_store">Tap here to open ConnectIQ Store.</string>
     <string name="open_app_already_open">The Comm app is already open on the device.</string>
     <string name="received_message">Received message from device.</string>
 
@@ -49,4 +53,5 @@
     <string name="github_repository_link">GitHub Repository</string>
     <string name="personal_website_link">About the Developer</string>
     <string name="support_note">For support or questions, feel free to reach out via the GitHub repository!</string>
+
 </resources>

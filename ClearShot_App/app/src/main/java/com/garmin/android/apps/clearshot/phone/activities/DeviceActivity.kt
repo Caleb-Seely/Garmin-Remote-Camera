@@ -132,7 +132,7 @@ class DeviceActivity : AppCompatActivity() {
         // Find views
         statusTextView = findViewById(R.id.status_text)
         countdownTextView = findViewById(R.id.countdown_text)
-        openAppButton = findViewById(R.id.openapp)
+        openAppButton = findViewById(R.id.open_watch_app)
         viewFinder = findViewById(R.id.viewFinder)
         cameraFlipButton = findViewById(R.id.camera_flip_button)
         flashToggleButton = findViewById(R.id.flash_toggle_button)

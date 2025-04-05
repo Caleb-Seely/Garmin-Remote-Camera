@@ -62,8 +62,8 @@
             android:layout_marginEnd="16dp"
             android:background="@android:color/transparent"
             android:src="@drawable/ic_baseline_info_24"
-            android:tint="@android:color/white"
-            android:contentDescription="Info" />
+            app:tint="@android:color/white"
+            android:contentDescription="@string/info_description" />
 
         <ImageButton
             android:id="@+id/flash_toggle_button"
@@ -71,8 +71,8 @@
             android:layout_height="48dp"
             android:background="@android:color/transparent"
             android:src="@drawable/ic_baseline_flash_off_24"
-            android:tint="@android:color/white"
-            android:contentDescription="Toggle Flash" />
+            app:tint="@android:color/white"
+            android:contentDescription="@string/toggle_flash_description" />
 
 
         <FrameLayout
@@ -99,10 +99,10 @@
                     android:layout_height="48dp"
                     android:background="@android:color/transparent"
                     android:src="@drawable/ic_baseline_camera_24"
-                    android:tint="@android:color/white"
+                    app:tint="@android:color/white"
                     android:scaleX="1.0"
                     android:scaleY="1.0"
-                    android:contentDescription="Capture Photo" />
+                    android:contentDescription="@string/capture_photo_description" />
 
                 <ImageButton
                     android:id="@+id/video_button"
@@ -110,23 +110,23 @@
                     android:layout_height="48dp"
                     android:background="@android:color/transparent"
                     android:src="@drawable/ic_baseline_videocam_24"
-                    android:tint="@android:color/white"
+                    app:tint="@android:color/white"
                     android:scaleX="1.0"
                     android:scaleY="1.0"
-                    android:contentDescription="Record Video" />
+                    android:contentDescription="@string/record_video_description" />
 
             </LinearLayout>
         </FrameLayout>
 
         <ImageButton
-            android:id="@+id/openapp"
+            android:id="@+id/open_watch_app"
             android:layout_width="48dp"
             android:layout_height="48dp"
             android:layout_marginEnd="16dp"
             android:background="@android:color/transparent"
             android:src="@drawable/watch_screentime_35dp"
-            android:tint="@android:color/white"
-            android:contentDescription="Open App" />
+            app:tint="@android:color/white"
+            android:contentDescription="@string/watch_app_description" />
 
         <ImageButton
             android:id="@+id/camera_flip_button"
@@ -135,8 +135,8 @@
             android:layout_marginEnd="16dp"
             android:background="@android:color/transparent"
             android:src="@drawable/ic_baseline_flip_camera_24"
-            android:tint="@android:color/white"
-            android:contentDescription="Flip Camera" />
+            app:tint="@android:color/white"
+            android:contentDescription="@string/flip_camera_description" />
 
 
     </LinearLayout>
