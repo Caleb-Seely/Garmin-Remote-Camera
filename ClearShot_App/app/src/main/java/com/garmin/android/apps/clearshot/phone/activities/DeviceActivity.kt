@@ -19,7 +19,9 @@ import android.text.style.ForegroundColorSpan
 import android.util.Log
 import android.view.View
 import android.view.WindowManager
+import android.widget.FrameLayout
 import android.widget.ImageButton
+import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.viewModels
@@ -33,6 +35,7 @@ import com.garmin.android.apps.clearshot.phone.ui.StatusMessages
 import com.garmin.android.apps.clearshot.phone.ui.UIConstants
 import com.garmin.android.apps.clearshot.phone.viewmodel.DeviceViewModel
 import com.garmin.android.connectiq.IQDevice
+import com.garmin.android.apps.clearshot.phone.utils.IconRotationManager
 
 // TODO Add a valid store app id.
 private const val STORE_APP_ID = ""
@@ -261,8 +264,9 @@ class DeviceActivity : AppCompatActivity() {
             viewModel.openApp()
         }
 
-        // Send test message button (we now use this as a back button)
-        findViewById<View>(R.id.send_test_msg_button).setOnClickListener {
+        // Device menu (we now use this as a back button)
+        findViewById<View>(R.id.device_menu_button).setOnClickListener {
+            // Simply finish this activity to return to MainActivity
             finish()
         }
     }
@@ -359,6 +363,18 @@ class DeviceActivity : AppCompatActivity() {
         super.onResume()
         Log.d(TAG, "onResume: Registering for app events")
         
+        // Start rotation updates for all buttons using existing references
+        val viewsToRotate = listOf<View>(
+            cameraFlipButton,
+            findViewById<ImageButton>(R.id.device_menu_button),
+            flashToggleButton,
+            captureButton,
+            videoButton,
+            openAppButton,
+            countdownTextView
+        )
+        IconRotationManager.startRotationUpdates(this, viewsToRotate)
+        
         // First register for events
         viewModel.registerForAppEvents()
         
@@ -383,6 +399,9 @@ class DeviceActivity : AppCompatActivity() {
     override fun onPause() {
         super.onPause()
         Log.d(TAG, "onPause: Unregistering events")
+        
+        // Stop rotation updates
+        IconRotationManager.stopRotationUpdates()
         
         // Properly clean up before pausing
         try {
