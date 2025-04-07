@@ -142,7 +142,10 @@ class DeviceActivity : AppCompatActivity() {
 
         // Initial UI state
         flashToggleButton.setImageResource(R.drawable.ic_baseline_flash_off_24)
-        flashToggleButton.alpha = UIConstants.BUTTON_DISABLED_ALPHA
+        // Set initial state for flash button (back camera is default)
+        flashToggleButton.isEnabled = true
+        flashToggleButton.alpha = UIConstants.BUTTON_ENABLED_ALPHA
+        flashToggleButton.setColorFilter(ContextCompat.getColor(this, android.R.color.white))
         videoButton.setImageResource(R.drawable.ic_baseline_videocam_24)
         captureButton.setImageResource(R.drawable.ic_baseline_camera_24)
         
@@ -220,6 +223,12 @@ class DeviceActivity : AppCompatActivity() {
             flashToggleButton.isEnabled = !isFrontCamera
             flashToggleButton.alpha = if (isFrontCamera) 
                 UIConstants.BUTTON_DISABLED_ALPHA else UIConstants.BUTTON_ENABLED_ALPHA
+            flashToggleButton.setColorFilter(
+                if (isFrontCamera) 
+                    ContextCompat.getColor(this, android.R.color.darker_gray)
+                else 
+                    ContextCompat.getColor(this, android.R.color.white)
+            )
                 
             // Re-enable and restore button appearance after a delay
             Handler(Looper.getMainLooper()).postDelayed({

@@ -69,6 +69,7 @@
             android:id="@+id/flash_toggle_button"
             android:layout_width="48dp"
             android:layout_height="48dp"
+            android:layout_marginEnd="16dp"
             android:background="@android:color/transparent"
             android:src="@drawable/ic_baseline_flash_off_24"
             app:tint="@android:color/white"
