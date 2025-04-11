@@ -17,14 +17,23 @@ class MainView extends BaseView {
     var timeIcons = {}; // Dictionary to store time icons
     var timer;
     var lastUpdateTime = 0;
-
+   var bb;
     /**
      * Initialize the view
      */
     function initialize() {
         BaseView.initialize();
         timer = new Timer.Timer();
+         bb=(WatchUi has :getSubscreen) ? WatchUi.getSubscreen() : null;
+        if (bb != null) {
+    System.println("Subscreen: " + bb.toString());
+} else {
+    System.println("Subscreen: null");
+}
+
+
         System.println("MainView initialized");
+        
     }
 
     /**
