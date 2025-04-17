@@ -29,4 +29,18 @@
         <item name="android:windowLightNavigationBar">false</item>
     </style>
 
+    // Custom BottomSheetDialog style
+    <style name="BlackBottomSheetStyle" parent="Theme.Design.BottomSheetDialog">
+        <item name="bottomSheetStyle">@style/BlackBottomSheetStyle.Modal</item>
+        <item name="android:textColor">@android:color/white</item>
+        <item name="android:textColorPrimary">@android:color/white</item>
+        <item name="android:textColorSecondary">@android:color/white</item>
+        <item name="colorControlNormal">@android:color/white</item>
+        <item name="colorControlActivated">@android:color/white</item>
+    </style>
+
+    <style name="BlackBottomSheetStyle.Modal" parent="Widget.Design.BottomSheet.Modal">
+        <item name="android:background">@drawable/settings_background</item>
+    </style>
+
 </resources>

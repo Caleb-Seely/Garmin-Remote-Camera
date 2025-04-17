@@ -3,7 +3,8 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="vertical"
-    android:padding="16dp">
+    android:padding="16dp"
+    android:background="@drawable/settings_background">
 
     <TextView
         android:layout_width="match_parent"
@@ -71,4 +72,4 @@
 
     <!-- Add more settings sections here as needed -->
 
-</LinearLayout> 
+</LinearLayout>
