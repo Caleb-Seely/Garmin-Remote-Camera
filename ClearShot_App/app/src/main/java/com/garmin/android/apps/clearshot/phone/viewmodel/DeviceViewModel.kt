@@ -26,6 +26,7 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
         private const val TAG = "DeviceViewModel"
         private const val PREF_NAME = "ClearShotPrefs"
         private const val KEY_ASPECT_RATIO = "aspect_ratio_16_9"
+        private const val KEY_PHOTO_ASPECT_RATIO = "photo_aspect_ratio_16_9"
         private const val KEY_FLASH_ENABLED = "flash_enabled"
     }
 
@@ -59,6 +60,7 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
     private val myApp: IQApp = IQApp(Constants.COMM_WATCH_ID)
     private var device: IQDevice? = null
     private var _is16_9 = false
+    private var _photoModeAspectRatio = false
     private val prefs = application.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
 
     init {
@@ -383,6 +385,15 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
         // Update the UI with new mode
         _isVideoMode.postValue(newMode)
         
+        if (newMode) {
+            // Entering video mode - save current aspect ratio and force 16:9
+            _photoModeAspectRatio = _is16_9
+            prefs.edit().putBoolean(KEY_PHOTO_ASPECT_RATIO, _photoModeAspectRatio).apply()
+            setAspectRatio(true)
+        } else {
+            // Exiting video mode - restore saved photo mode aspect ratio
+            setAspectRatio(_photoModeAspectRatio)
+        }
 
         // Update status message
         _statusMessage.postValue(
@@ -577,5 +588,6 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
 
     private fun loadSavedAspectRatio() {
         _is16_9 = prefs.getBoolean(KEY_ASPECT_RATIO, false)
+        _photoModeAspectRatio = prefs.getBoolean(KEY_PHOTO_ASPECT_RATIO, _is16_9)
     }
 } 

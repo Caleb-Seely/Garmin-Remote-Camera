@@ -19,6 +19,7 @@
         android:orientation="vertical">
 
         <TextView
+            android:id="@+id/aspect_ratio_label"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="@string/aspect_ratio"

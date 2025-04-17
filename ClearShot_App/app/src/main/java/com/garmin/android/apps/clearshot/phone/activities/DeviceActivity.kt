@@ -286,6 +286,9 @@ class DeviceActivity : AppCompatActivity() {
             // Set the initial flash state
             settingsDialog.setInitialFlashState(viewModel.isFlashEnabled.value ?: false)
             
+            // Set the current video mode state
+            settingsDialog.setVideoMode(viewModel.isVideoMode.value ?: false)
+            
             // Set a listener to handle aspect ratio changes
             settingsDialog.setOnAspectRatioChangedListener { is16_9 ->
                 Log.d(TAG, "Aspect ratio changed to ${if (is16_9) "16:9" else "4:3"}")
