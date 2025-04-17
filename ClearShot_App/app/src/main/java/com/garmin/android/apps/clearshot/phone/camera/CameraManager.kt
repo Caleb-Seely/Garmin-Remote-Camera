@@ -1,9 +1,12 @@
 package com.garmin.android.apps.clearshot.phone.camera
 
 import android.content.Context
+import android.view.View
+import android.view.ViewGroup
 import android.widget.Toast
 import androidx.camera.view.PreviewView
 import androidx.lifecycle.LifecycleOwner
+import com.garmin.android.apps.clearshot.phone.R
 import com.garmin.android.apps.clearshot.phone.camera.CameraLogger.CAMERA_MANAGER
 import java.util.concurrent.TimeUnit
 
@@ -23,6 +26,7 @@ class CameraManager(
 ) {
     companion object {
         private var instanceCount = 0
+        private const val DIM_DURATION = 250L // Duration of dimming effect in milliseconds
     }
 
     // The central state repository
@@ -48,6 +52,11 @@ class CameraManager(
         } else {
             executePhotoCapture()
         }
+    }
+
+    // Dimming overlay view
+    private val dimmingOverlay: View by lazy {
+        (viewFinder.parent as ViewGroup).findViewById<View>(R.id.dimmingOverlay)
     }
 
     init {
@@ -89,10 +98,25 @@ class CameraManager(
      */
     private fun executePhotoCapture() {
         CameraLogger.d(CAMERA_MANAGER, "executePhotoCapture() called", this)
-        if (!photoManager.capturePhoto(cameraInitializer.getImageCapture())) {
-            CameraLogger.e(CAMERA_MANAGER, "Photo capture failed", null, this)
-            Toast.makeText(context, "Failed to take photo", Toast.LENGTH_SHORT).show()
-        }
+        
+        // Show dimming overlay with a more pronounced effect
+        dimmingOverlay.animate()
+            .alpha(0.7f)
+            .setDuration(DIM_DURATION / 2)
+            .withEndAction {
+                // Take the photo during the dim
+                if (!photoManager.capturePhoto(cameraInitializer.getImageCapture())) {
+                    CameraLogger.e(CAMERA_MANAGER, "Photo capture failed", null, this)
+                    Toast.makeText(context, "Failed to take photo", Toast.LENGTH_SHORT).show()
+                }
+                
+                // Fade back to transparent
+                dimmingOverlay.animate()
+                    .alpha(0f)
+                    .setDuration(DIM_DURATION / 2)
+                    .start()
+            }
+            .start()
     }
 
     /**
