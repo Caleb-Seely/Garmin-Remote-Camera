@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="16dp">
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/camera_settings"
+        android:textSize="20sp"
+        android:textStyle="bold"
+        android:layout_marginBottom="16dp"/>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/aspect_ratio"
+            android:textSize="16sp"
+            android:layout_marginBottom="8dp"/>
+
+        <RadioGroup
+            android:id="@+id/aspect_ratio_group"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <RadioButton
+                android:id="@+id/aspect_ratio_4_3"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/aspect_ratio_4_3"
+                />
+
+            <RadioButton
+                android:id="@+id/aspect_ratio_16_9"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/aspect_ratio_16_9"/>
+
+        </RadioGroup>
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:layout_marginTop="16dp">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/flash"
+            android:textSize="16sp"
+            android:layout_marginBottom="8dp"/>
+
+        <Switch
+            android:id="@+id/flash_toggle_button"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/toggle_flash_description"/>
+
+    </LinearLayout>
+
+    <!-- Add more settings sections here as needed -->
+
+</LinearLayout> 

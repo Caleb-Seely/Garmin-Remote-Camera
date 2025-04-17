@@ -56,7 +56,8 @@
         <activity 
             android:name=".activities.DeviceActivity"
             android:screenOrientation="portrait"
-            android:theme="@style/Theme.AppCompat.Light.DarkActionBar" />
+            android:theme="@style/DeviceActivityTheme"
+            android:windowSoftInputMode="adjustNothing" />
 
         <activity 
             android:name=".activities.HelpActivity"

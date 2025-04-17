@@ -24,6 +24,9 @@ import com.garmin.android.connectiq.IQDevice
 class DeviceViewModel(application: Application) : AndroidViewModel(application) {
     companion object {
         private const val TAG = "DeviceViewModel"
+        private const val PREF_NAME = "ClearShotPrefs"
+        private const val KEY_ASPECT_RATIO = "aspect_ratio_16_9"
+        private const val KEY_FLASH_ENABLED = "flash_enabled"
     }
 
     // Camera state
@@ -55,6 +58,17 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
     
     private val myApp: IQApp = IQApp(Constants.COMM_WATCH_ID)
     private var device: IQDevice? = null
+    private var _is16_9 = false
+    private val prefs = application.getSharedPreferences(PREF_NAME, Context.MODE_PRIVATE)
+
+    init {
+        loadSavedAspectRatio()
+        loadSavedFlashState()
+    }
+
+    private fun loadSavedFlashState() {
+        _isFlashEnabled.postValue(prefs.getBoolean(KEY_FLASH_ENABLED, false))
+    }
 
     /**
      * Initialize the ViewModel with required components
@@ -66,6 +80,9 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
         device: IQDevice
     ) {
         this.device = device
+        
+        // Load saved aspect ratio before initializing camera
+        loadSavedAspectRatio()
         
         initializeCameraManager(context, lifecycleOwner, viewFinder)
         initializeConnectIQManager(context)
@@ -126,7 +143,8 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
                         _statusMessage.postValue(status)
                     }
                 }
-            }
+            },
+            initialAspectRatio = _is16_9  // Pass the saved aspect ratio to CameraManager
         )
     }
 
@@ -319,8 +337,20 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun toggleFlash() {
+        val newState = !(_isFlashEnabled.value ?: false)
+        _isFlashEnabled.postValue(newState)
+        prefs.edit().putBoolean(KEY_FLASH_ENABLED, newState).apply()
         cameraManager?.toggleFlash()
-        updateFlashState()
+    }
+
+    fun setFlashEnabled(isEnabled: Boolean) {
+        _isFlashEnabled.postValue(isEnabled)
+        prefs.edit().putBoolean(KEY_FLASH_ENABLED, isEnabled).apply()
+        if (isEnabled) {
+            cameraManager?.toggleFlash()
+        } else {
+            cameraManager?.toggleFlash()
+        }
     }
 
     fun flipCamera() {
@@ -353,6 +383,7 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
         // Update the UI with new mode
         _isVideoMode.postValue(newMode)
         
+
         // Update status message
         _statusMessage.postValue(
             if (newMode) 
@@ -532,5 +563,19 @@ class DeviceViewModel(application: Application) : AndroidViewModel(application) 
         if (_isFlashEnabled.value != (!isFront && isFlashOn)) {
             _isFlashEnabled.postValue(!isFront && isFlashOn)
         }
+    }
+
+    fun setAspectRatio(is16_9: Boolean) {
+        _is16_9 = is16_9
+        prefs.edit().putBoolean(KEY_ASPECT_RATIO, is16_9).apply()
+        cameraManager?.setAspectRatio(is16_9)
+    }
+
+    fun getCurrentAspectRatio(): Boolean {
+        return _is16_9
+    }
+
+    private fun loadSavedAspectRatio() {
+        _is16_9 = prefs.getBoolean(KEY_ASPECT_RATIO, false)
     }
 } 

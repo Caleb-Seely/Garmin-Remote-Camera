@@ -29,7 +29,7 @@
     <!-- Help Page Content -->
     <string name="help">Help</string>
     <string name="what_is_clearshot_title">What is ClearShot?</string>
-    <string name="what_is_clearshot_content">ClearShot is a companion app that lets you remotely control your Android device’s camera from your Garmin watch. Snap photos and start or stop video recording—all from your wrist. </string>
+    <string name="what_is_clearshot_content">ClearShot is a companion app that lets you remotely control your Android device camera from your Garmin watch. Snap photos and start or stop video recording—all from your wrist. </string>
 
     <string name="requirements_title">Requirements</string>
     <string name="requirements_content">ClearShot requires the Garmin watch companion app to work properly. You can download it from the Connect IQ Store.</string>
@@ -53,5 +53,12 @@
     <string name="github_repository_link">GitHub Repository</string>
     <string name="personal_website_link">About the Developer</string>
     <string name="support_note">For support or questions, feel free to reach out via the GitHub repository!</string>
+
+    <string name="settings_description">Open camera settings</string>
+    <string name="camera_settings">Camera Settings</string>
+    <string name="aspect_ratio">Aspect Ratio</string>
+    <string name="aspect_ratio_4_3">4:3</string>
+    <string name="aspect_ratio_16_9">16:9</string>
+    <string name="flash">Flash</string>
 
 </resources>

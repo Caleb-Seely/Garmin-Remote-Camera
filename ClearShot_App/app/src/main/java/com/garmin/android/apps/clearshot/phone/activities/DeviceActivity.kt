@@ -36,6 +36,9 @@ import com.garmin.android.apps.clearshot.phone.ui.UIConstants
 import com.garmin.android.apps.clearshot.phone.viewmodel.DeviceViewModel
 import com.garmin.android.connectiq.IQDevice
 import com.garmin.android.apps.clearshot.phone.utils.IconRotationManager
+import com.garmin.android.apps.clearshot.phone.dialogs.SettingsDialog
+import androidx.constraintlayout.widget.ConstraintLayout
+import com.garmin.android.apps.clearshot.phone.ui.BottomControlBarManager
 
 // TODO Add a valid store app id.
 private const val STORE_APP_ID = ""
@@ -79,12 +82,15 @@ class DeviceActivity : AppCompatActivity() {
     private lateinit var statusTextView: TextView
     private lateinit var countdownTextView: TextView
     private lateinit var cameraFlipButton: ImageButton
-    private lateinit var flashToggleButton: ImageButton
     private lateinit var captureButton: ImageButton
     private lateinit var videoButton: ImageButton
     private lateinit var modeIndicator: View
     private lateinit var viewFinder: PreviewView
     private lateinit var openAppButton: ImageButton
+    private lateinit var settingsButton: ImageButton
+    private lateinit var bottomControlBar: LinearLayout
+    private lateinit var deviceTitle: TextView
+    private lateinit var bottomControlBarManager: BottomControlBarManager
 
     // Device reference
     private lateinit var device: IQDevice
@@ -118,9 +124,6 @@ class DeviceActivity : AppCompatActivity() {
                 )
             }
 
-            // Keep screen on for countdown and recording
-            window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-
         } catch (e: Exception) {
             Log.e(TAG, "Error in onCreate", e)
             Toast.makeText(this, "Error initializing app: ${e.message}", Toast.LENGTH_LONG).show()
@@ -135,29 +138,42 @@ class DeviceActivity : AppCompatActivity() {
         openAppButton = findViewById(R.id.open_watch_app)
         viewFinder = findViewById(R.id.viewFinder)
         cameraFlipButton = findViewById(R.id.camera_flip_button)
-        flashToggleButton = findViewById(R.id.flash_toggle_button)
         captureButton = findViewById(R.id.capture_button)
         videoButton = findViewById(R.id.video_button)
         modeIndicator = findViewById(R.id.mode_indicator)
+        settingsButton = findViewById(R.id.settings_button)
+        bottomControlBar = findViewById(R.id.bottom_control_bar)
+        deviceTitle = findViewById(R.id.device_title)
+
+        // Initialize bottom control bar manager
+        bottomControlBarManager = BottomControlBarManager(bottomControlBar, viewFinder, deviceTitle)
+
+        // Set initial position based on current aspect ratio
+        val initialAspectRatio = viewModel.getCurrentAspectRatio()
+        Log.d(TAG, "Setting initial position with aspect ratio=$initialAspectRatio")
+        bottomControlBarManager.updatePosition(initialAspectRatio)
 
         // Initial UI state
-        flashToggleButton.setImageResource(R.drawable.ic_baseline_flash_off_24)
-        // Set initial state for flash button (back camera is default)
-        flashToggleButton.isEnabled = true
-        flashToggleButton.alpha = UIConstants.BUTTON_ENABLED_ALPHA
-        flashToggleButton.setColorFilter(ContextCompat.getColor(this, android.R.color.white))
         videoButton.setImageResource(R.drawable.ic_baseline_videocam_24)
         captureButton.setImageResource(R.drawable.ic_baseline_camera_24)
         
         // Add a global layout listener to update mode indicator position once layout is complete
+        var isFirstLayout = true
         viewFinder.viewTreeObserver.addOnGlobalLayoutListener {
+            if (!isFirstLayout) {
+                return@addOnGlobalLayoutListener
+            }
+            isFirstLayout = false
+            
             // Get current video mode
             val isVideoMode = viewModel.isVideoMode.value ?: false
+            val aspectRatio = viewModel.getCurrentAspectRatio()
+            Log.d(TAG, "Initial layout complete - isVideoMode=$isVideoMode, aspectRatio=$aspectRatio")
             
-            // Force an update to mode indicator position after layout completes
-            Handler(Looper.getMainLooper()).postDelayed({
-                updateModeIndicator(isVideoMode)
-            }, 100)
+            // Update layout
+            updateModeIndicator(isVideoMode)
+            // Update position again after layout to ensure proper positioning
+            bottomControlBarManager.updatePosition(aspectRatio)
         }
     }
 
@@ -188,11 +204,6 @@ class DeviceActivity : AppCompatActivity() {
             }, 50)
         })
 
-        // Observe flash state changes
-        viewModel.isFlashEnabled.observe(this, Observer { isEnabled ->
-            updateFlashButtonIcon(isEnabled)
-        })
-
         // Observe device connection state
         viewModel.isDeviceConnected.observe(this, Observer { isConnected ->
             Log.d(TAG, "Connection state changed to: $isConnected")
@@ -217,31 +228,12 @@ class DeviceActivity : AppCompatActivity() {
             
             // Flip camera
             viewModel.flipCamera()
-            
-            // Update flash button state based on camera position
-            val isFrontCamera = viewModel.isFrontCamera()
-            flashToggleButton.isEnabled = !isFrontCamera
-            flashToggleButton.alpha = if (isFrontCamera) 
-                UIConstants.BUTTON_DISABLED_ALPHA else UIConstants.BUTTON_ENABLED_ALPHA
-            flashToggleButton.setColorFilter(
-                if (isFrontCamera) 
-                    ContextCompat.getColor(this, android.R.color.darker_gray)
-                else 
-                    ContextCompat.getColor(this, android.R.color.white)
-            )
                 
             // Re-enable and restore button appearance after a delay
             Handler(Looper.getMainLooper()).postDelayed({
                 cameraFlipButton.alpha = 1.0f
                 cameraFlipButton.isEnabled = true
             }, 1000) // Longer delay to prevent rapid consecutive clicks
-        }
-
-        // Flash toggle button
-        flashToggleButton.setOnClickListener {
-            if (!viewModel.isFrontCamera()) {
-                viewModel.toggleFlash()
-            }
         }
 
         // Camera mode button
@@ -278,13 +270,38 @@ class DeviceActivity : AppCompatActivity() {
             // Simply finish this activity to return to MainActivity
             finish()
         }
+
+        setupSettingsDialog()
     }
 
-    private fun updateFlashButtonIcon(isEnabled: Boolean) {
-        flashToggleButton.setImageResource(
-            if (isEnabled) R.drawable.ic_baseline_flash_on_24
-            else R.drawable.ic_baseline_flash_off_24
-        )
+    private fun setupSettingsDialog() {
+        settingsButton.setOnClickListener {
+            val settingsDialog = SettingsDialog()
+            
+            // Set the initial aspect ratio based on the ViewModel
+            val initialAspectRatio = viewModel.getCurrentAspectRatio()
+            Log.d(TAG, "Showing settings dialog with initial aspect ratio=$initialAspectRatio")
+            settingsDialog.setInitialAspectRatio(initialAspectRatio)
+            
+            // Set the initial flash state
+            settingsDialog.setInitialFlashState(viewModel.isFlashEnabled.value ?: false)
+            
+            // Set a listener to handle aspect ratio changes
+            settingsDialog.setOnAspectRatioChangedListener { is16_9 ->
+                Log.d(TAG, "Aspect ratio changed to ${if (is16_9) "16:9" else "4:3"}")
+                viewModel.setAspectRatio(is16_9)
+                bottomControlBarManager.updatePosition(is16_9)
+                Toast.makeText(this, "Aspect Ratio changed to ${if (is16_9) "16:9" else "4:3"}", Toast.LENGTH_SHORT).show()
+            }
+            
+            // Set a listener to handle flash changes
+            settingsDialog.setOnFlashChangedListener { isEnabled ->
+                viewModel.setFlashEnabled(isEnabled)
+                Toast.makeText(this, "Flash ${if (isEnabled) "enabled" else "disabled"}", Toast.LENGTH_SHORT).show()
+            }
+            
+            settingsDialog.show(supportFragmentManager, SettingsDialog.TAG)
+        }
     }
 
     fun updateModeIndicator(isVideo: Boolean) {
@@ -344,7 +361,8 @@ class DeviceActivity : AppCompatActivity() {
         Log.d(TAG, "updateActionBarTitle called with isConnected=$isConnected")
         val prefix = "ClearShot | "
         val deviceName = device.friendlyName
-        val fullTitle = prefix + deviceName
+//        val status = if (isConnected) "CONNECTED" else "DISCONNECTED"
+        val fullTitle = "$prefix$deviceName"
         
         val spannableTitle = SpannableString(fullTitle)
         val deviceNameColor = if (isConnected) {
@@ -355,7 +373,7 @@ class DeviceActivity : AppCompatActivity() {
             ContextCompat.getColor(this, android.R.color.holo_red_light)
         }
         
-        // Apply color span only to the device name portion
+        // Apply color span to both device name and status
         spannableTitle.setSpan(
             ForegroundColorSpan(deviceNameColor), 
             prefix.length,  // Start index (after "ClearShot | ")
@@ -363,9 +381,7 @@ class DeviceActivity : AppCompatActivity() {
             Spannable.SPAN_INCLUSIVE_INCLUSIVE
         )
         
-        supportActionBar?.let { actionBar ->
-            actionBar.title = spannableTitle
-        }
+        findViewById<TextView>(R.id.device_title)?.text = spannableTitle
     }
 
     override fun onResume() {
@@ -376,7 +392,6 @@ class DeviceActivity : AppCompatActivity() {
         val viewsToRotate = listOf<View>(
             cameraFlipButton,
             findViewById<ImageButton>(R.id.device_menu_button),
-            flashToggleButton,
             captureButton,
             videoButton,
             openAppButton,

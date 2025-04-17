@@ -18,6 +18,8 @@ class CameraState {
     var isFlashEnabled = false
         private set
     
+    var is16_9AspectRatio = false
+    
     private var recordingStartTime: Long = 0
     
     /**

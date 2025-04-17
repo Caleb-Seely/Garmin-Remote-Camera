@@ -27,6 +27,7 @@ import androidx.camera.core.resolutionselector.ResolutionSelector
 import androidx.camera.core.resolutionselector.ResolutionStrategy
 import androidx.camera.core.AspectRatio
 import androidx.camera.core.resolutionselector.AspectRatioStrategy
+import androidx.appcompat.app.AppCompatActivity
 
 /**
  * Responsible for initializing and binding the camera for use.
@@ -135,13 +136,35 @@ class CameraInitializer(
                 Toast.makeText(context, "Camera not available on this device", Toast.LENGTH_SHORT).show()
                 return
             }
+
+            // Set implementation mode to COMPATIBLE and configure scaling
+            viewFinder.implementationMode = PreviewView.ImplementationMode.COMPATIBLE
+            viewFinder.scaleType = PreviewView.ScaleType.FIT_START
             
+            // Force the view to match parent and ignore system insets
+            viewFinder.layoutParams = android.view.ViewGroup.LayoutParams(
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT
+            )
+            
+            // Ensure the view is laid out properly
+            viewFinder.post {
+                viewFinder.requestLayout()
+                viewFinder.invalidate()
+            }
+
             // Preview with high quality settings and matching aspect ratio
             val preview = Preview.Builder()
                 .setTargetRotation(viewFinder.display.rotation)
                 .setResolutionSelector(
                     ResolutionSelector.Builder()
-                        .setAspectRatioStrategy(AspectRatioStrategy.RATIO_4_3_FALLBACK_AUTO_STRATEGY)
+                        .setAspectRatioStrategy(
+                            if (cameraState.is16_9AspectRatio) {
+                                AspectRatioStrategy.RATIO_16_9_FALLBACK_AUTO_STRATEGY
+                            } else {
+                                AspectRatioStrategy.RATIO_4_3_FALLBACK_AUTO_STRATEGY
+                            }
+                        )
                         .build()
                 )
                 .build()
@@ -149,65 +172,96 @@ class CameraInitializer(
                     it.setSurfaceProvider(viewFinder.surfaceProvider)
                 }
 
-            // Calculate and set preview dimensions to eliminate side bars
-            viewFinder.post {
-                val displayMetrics = context.resources.displayMetrics
-                val screenWidth = displayMetrics.widthPixels
-                
-                // Calculate a height that's more than 4:3 to eliminate side bars
-                // Using a ratio closer to 3:4 for height (inverting the aspect ratio to prioritize height)
-                val height = (screenWidth * 4) / 3  // This makes it much taller
-                
-                val params = viewFinder.layoutParams
-                params.height = height
-                viewFinder.layoutParams = params
-                
-                // Set scale type to adjust for the larger calculated height
-                viewFinder.scaleType = PreviewView.ScaleType.FILL_CENTER
-            }
-
             // ImageCapture with maximum quality settings and matching aspect ratio
+            // ImageCapture with aspect ratio matching preview
             val imageCaptureBuilder = ImageCapture.Builder()
                 .setTargetRotation(viewFinder.display.rotation)
-                .setResolutionSelector(
-                    ResolutionSelector.Builder()
-                        .setAspectRatioStrategy(AspectRatioStrategy.RATIO_4_3_FALLBACK_AUTO_STRATEGY)
-                        .build()
-                )
                 .setCaptureMode(ImageCapture.CAPTURE_MODE_MAXIMIZE_QUALITY)
                 .setFlashMode(if (cameraState.isFlashEnabled) ImageCapture.FLASH_MODE_ON else ImageCapture.FLASH_MODE_OFF)
                 .setJpegQuality(100)
 
-            // Only configure highest resolution for back camera
-            if (!cameraState.isFrontCamera) {
-                try {
-                    val cameraManager = context.getSystemService(Context.CAMERA_SERVICE) as android.hardware.camera2.CameraManager
-                    val cameraId = cameraManager.cameraIdList.firstOrNull { id ->
-                        val characteristics = cameraManager.getCameraCharacteristics(id)
-                        characteristics.get(android.hardware.camera2.CameraCharacteristics.LENS_FACING) == 
-                            android.hardware.camera2.CameraCharacteristics.LENS_FACING_BACK
+// Get camera characteristics to find available resolutions
+            try {
+                val cameraManager = context.getSystemService(Context.CAMERA_SERVICE) as android.hardware.camera2.CameraManager
+                val cameraId = cameraManager.cameraIdList.firstOrNull { id ->
+                    val characteristics = cameraManager.getCameraCharacteristics(id)
+                    val facing = characteristics.get(android.hardware.camera2.CameraCharacteristics.LENS_FACING)
+                    if (cameraState.isFrontCamera) {
+                        facing == android.hardware.camera2.CameraCharacteristics.LENS_FACING_FRONT
+                    } else {
+                        facing == android.hardware.camera2.CameraCharacteristics.LENS_FACING_BACK
+                    }
+                }
+
+                if (cameraId != null) {
+                    val characteristics = cameraManager.getCameraCharacteristics(cameraId)
+                    val map = characteristics.get(android.hardware.camera2.CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
+                    val jpegSizes = map?.getOutputSizes(android.graphics.ImageFormat.JPEG)
+
+                    // Define target ratio with tolerance
+                    val targetRatio = if (cameraState.is16_9AspectRatio) 16.0f/9.0f else 4.0f/3.0f
+                    val tolerance = 0.1f
+
+                    // Log all available sizes for debugging
+                    jpegSizes?.forEach { size ->
+                        val ratio = size.width.toFloat() / size.height.toFloat()
+                        CameraLogger.d(CAMERA_INITIALIZER, "Available size: ${size.width}x${size.height}, ratio: $ratio", this)
                     }
 
-                    if (cameraId != null) {
-                        val characteristics = cameraManager.getCameraCharacteristics(cameraId)
-                        val map = characteristics.get(android.hardware.camera2.CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
-                        val jpegSizes = map?.getOutputSizes(android.graphics.ImageFormat.JPEG)
-                        val highestResolution = jpegSizes?.maxByOrNull { it.width * it.height }
+                    // Find the highest resolution that matches our desired aspect ratio
+                    val matchingSizes = jpegSizes?.filter { size ->
+                        val ratio = size.width.toFloat() / size.height.toFloat()
+                        Math.abs(ratio - targetRatio) < tolerance
+                    }
+
+                    if (!matchingSizes.isNullOrEmpty()) {
+                        val highestResolution = matchingSizes.maxByOrNull { it.width * it.height }
 
                         if (highestResolution != null) {
-                            CameraLogger.d(CAMERA_INITIALIZER, "Using highest back camera resolution: $highestResolution", this)
+                            CameraLogger.d(CAMERA_INITIALIZER, "Using resolution: ${highestResolution.width}x${highestResolution.height} for ${if (cameraState.is16_9AspectRatio) "16:9" else "4:3"}", this)
+
+                            // Force this exact resolution
                             imageCaptureBuilder.setResolutionSelector(
                                 ResolutionSelector.Builder()
                                     .setResolutionStrategy(
-                                        ResolutionStrategy(highestResolution, ResolutionStrategy.FALLBACK_RULE_CLOSEST_HIGHER)
+                                        ResolutionStrategy(
+                                            highestResolution,
+                                            ResolutionStrategy.FALLBACK_RULE_NONE // No fallback, use exactly this resolution
+                                        )
                                     )
                                     .build()
                             )
                         }
+                    } else {
+                        CameraLogger.d(CAMERA_INITIALIZER, "No matching resolutions found for ratio: $targetRatio", this)
+                        // Fall back to the standard aspect ratio strategy
+                        imageCaptureBuilder.setResolutionSelector(
+                            ResolutionSelector.Builder()
+                                .setAspectRatioStrategy(
+                                    if (cameraState.is16_9AspectRatio) {
+                                        AspectRatioStrategy.RATIO_16_9_FALLBACK_AUTO_STRATEGY
+                                    } else {
+                                        AspectRatioStrategy.RATIO_4_3_FALLBACK_AUTO_STRATEGY
+                                    }
+                                )
+                                .build()
+                        )
                     }
-                } catch (e: Exception) {
-                    CameraLogger.e(CAMERA_INITIALIZER, "Error configuring back camera resolution: ${e.message}", e, this)
                 }
+            } catch (e: Exception) {
+                CameraLogger.e(CAMERA_INITIALIZER, "Error setting camera resolution: ${e.message}", e, this)
+                // Fall back to aspect ratio strategy
+                imageCaptureBuilder.setResolutionSelector(
+                    ResolutionSelector.Builder()
+                        .setAspectRatioStrategy(
+                            if (cameraState.is16_9AspectRatio) {
+                                AspectRatioStrategy.RATIO_16_9_FALLBACK_AUTO_STRATEGY
+                            } else {
+                                AspectRatioStrategy.RATIO_4_3_FALLBACK_AUTO_STRATEGY
+                            }
+                        )
+                        .build()
+                )
             }
 
             imageCapture = imageCaptureBuilder.build()
@@ -411,5 +465,19 @@ class CameraInitializer(
         camera = null
         imageCapture = null
         videoCapture = null
+    }
+
+    fun stopCamera() {
+        CameraLogger.d(CAMERA_INITIALIZER, "stopCamera() called", this)
+        try {
+            camera?.let { cam ->
+                cam.cameraControl.enableTorch(false)
+            }
+            camera = null
+            isCameraActive = false
+            isCameraInitialized = false
+        } catch (e: Exception) {
+            CameraLogger.e(CAMERA_INITIALIZER, "Error stopping camera", e, this)
+        }
     }
 } 

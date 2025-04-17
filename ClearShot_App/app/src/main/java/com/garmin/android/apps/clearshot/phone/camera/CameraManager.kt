@@ -18,7 +18,8 @@ class CameraManager(
     private val onPhotoTaken: (String) -> Unit = {},
     private val onCountdownUpdate: ((Int) -> Unit)? = null,
     private val onCameraSwapEnabled: ((Boolean) -> Unit)? = null,
-    private val onRecordingStatusUpdate: ((String) -> Unit)? = null
+    private val onRecordingStatusUpdate: ((String) -> Unit)? = null,
+    private val initialAspectRatio: Boolean = false
 ) {
     companion object {
         private var instanceCount = 0
@@ -52,6 +53,8 @@ class CameraManager(
     init {
         instanceCount++
         CameraLogger.d(CAMERA_MANAGER, "CameraManager instance created. Total instances: $instanceCount", this)
+        // Set initial aspect ratio
+        cameraState.is16_9AspectRatio = initialAspectRatio
     }
 
     /**
@@ -234,5 +237,18 @@ class CameraManager(
         // Decrement instance count for tracking purposes
         instanceCount--
         CameraLogger.d(CAMERA_MANAGER, "CameraManager instance shut down. Remaining instances: $instanceCount", this)
+    }
+
+    fun setAspectRatio(is16_9: Boolean) {
+        cameraState.is16_9AspectRatio = is16_9
+        restartCamera()
+    }
+
+    private fun restartCamera() {
+        // First stop the current camera
+        cameraInitializer.stopCamera()
+        
+        // Then start it again with new settings
+        cameraInitializer.startCamera()
     }
 } 
