@@ -139,13 +139,6 @@ class CameraInitializer(
 
             // Set implementation mode to COMPATIBLE and configure scaling
             viewFinder.implementationMode = PreviewView.ImplementationMode.COMPATIBLE
-            viewFinder.scaleType = PreviewView.ScaleType.FIT_START
-            
-            // Force the view to match parent and ignore system insets
-            viewFinder.layoutParams = android.view.ViewGroup.LayoutParams(
-                android.view.ViewGroup.LayoutParams.MATCH_PARENT,
-                android.view.ViewGroup.LayoutParams.MATCH_PARENT
-            )
             
             // Ensure the view is laid out properly
             viewFinder.post {
