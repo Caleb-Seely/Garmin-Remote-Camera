@@ -4,15 +4,15 @@
     "type": "APK",
     "kind": "Directory"
   },
-  "applicationId": "com.garmin.android.apps.connectiq.sample.comm",
+  "applicationId": "com.garmin.android.apps.clearshot.phone",
   "variantName": "release",
   "elements": [
     {
       "type": "SINGLE",
       "filters": [],
       "attributes": [],
-      "versionCode": 2,
-      "versionName": "2.0",
+      "versionCode": 5,
+      "versionName": "1.5",
       "outputFile": "app-release.apk"
     }
   ],

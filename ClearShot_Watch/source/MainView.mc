@@ -24,6 +24,7 @@ class MainView extends BaseView {
     function initialize() {
         BaseView.initialize();
         timer = new Timer.Timer();
+        timeIcons = {}; // Initialize empty dictionary
         System.println("MainView initialized");
     }
 
@@ -66,17 +67,33 @@ class MainView extends BaseView {
      * causing others to fail loading
      */
     function loadTimeIcons() {
-        try { timeIcons["0"] = WatchUi.loadResource(Rez.Drawables.time_0); } 
-        catch(ex) { System.println("Error loading time_0: " + ex.getErrorMessage()); }
+        try { 
+            var icon0 = WatchUi.loadResource(Rez.Drawables.time_0);
+            timeIcons.put("0", icon0);
+        } catch(ex) { 
+            System.println("Error loading time_0: " + ex.getErrorMessage()); 
+        }
         
-        try { timeIcons["3"] = WatchUi.loadResource(Rez.Drawables.time_3); } 
-        catch(ex) { System.println("Error loading time_3: " + ex.getErrorMessage()); }
+        try { 
+            var icon3 = WatchUi.loadResource(Rez.Drawables.time_3);
+            timeIcons.put("3", icon3);
+        } catch(ex) { 
+            System.println("Error loading time_3: " + ex.getErrorMessage()); 
+        }
         
-        try { timeIcons["5"] = WatchUi.loadResource(Rez.Drawables.time_5); } 
-        catch(ex) { System.println("Error loading time_5: " + ex.getErrorMessage()); }
+        try { 
+            var icon5 = WatchUi.loadResource(Rez.Drawables.time_5);
+            timeIcons.put("5", icon5);
+        } catch(ex) { 
+            System.println("Error loading time_5: " + ex.getErrorMessage()); 
+        }
         
-        try { timeIcons["10"] = WatchUi.loadResource(Rez.Drawables.time_10); } 
-        catch(ex) { System.println("Error loading time_10: " + ex.getErrorMessage()); }
+        try { 
+            var icon10 = WatchUi.loadResource(Rez.Drawables.time_10);
+            timeIcons.put("10", icon10);
+        } catch(ex) { 
+            System.println("Error loading time_10: " + ex.getErrorMessage()); 
+        }
     }
     
     /**
@@ -254,7 +271,7 @@ class MainView extends BaseView {
         // Draw the selected time icon in the center
         var timeIcon = null;
         if (timeIcons.hasKey(currentTimeOption)) {
-            timeIcon = timeIcons[currentTimeOption];
+            timeIcon = timeIcons.get(currentTimeOption);
         }
         
         if (timeIcon != null) {
