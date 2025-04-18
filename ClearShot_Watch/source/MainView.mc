@@ -17,23 +17,14 @@ class MainView extends BaseView {
     var timeIcons = {}; // Dictionary to store time icons
     var timer;
     var lastUpdateTime = 0;
-   var bb;
+    var subscreen;
     /**
      * Initialize the view
      */
     function initialize() {
         BaseView.initialize();
         timer = new Timer.Timer();
-         bb=(WatchUi has :getSubscreen) ? WatchUi.getSubscreen() : null;
-        if (bb != null) {
-    System.println("Subscreen: " + bb.toString());
-} else {
-    System.println("Subscreen: null");
-}
-
-
         System.println("MainView initialized");
-        
     }
 
     /**
@@ -44,6 +35,14 @@ class MainView extends BaseView {
     function onLayout(dc) {
         try {
             screenShape = System.getDeviceSettings().screenShape;
+            
+            // Check if this watch has a subscreen
+            subscreen = (WatchUi has :getSubscreen) ? WatchUi.getSubscreen() : null;
+            if (subscreen != null) {
+                System.println("Subscreen: " + subscreen.toString());
+            } else {
+                System.println("Subscreen: null");
+            }
             
             // Load camera icon
             cameraIcon = WatchUi.loadResource(Rez.Drawables.CameraIcon);
@@ -168,12 +167,12 @@ class MainView extends BaseView {
             var width = dc.getWidth();
             var height = dc.getHeight();
             var centerX = width / 2;
-            var centerY = height / 2;
+            var centerY = (height / 2) + 10 ;
             var paddingX = width * 0.1;
             var paddingY = width * 0.2;
             
-            // Draw the camera icon in the top right corner
-            drawCameraIcon(dc, width, paddingX, paddingY);
+            // Draw the camera icon - now handles subscreen positioning
+            drawCameraIcon(dc, width, height, paddingX, paddingY);
             
             // Draw the selected time option in the center
             drawSelectedTimeIcon(dc, centerX, centerY);
@@ -187,17 +186,36 @@ class MainView extends BaseView {
      * Helper function to draw the camera icon
      * @param dc The device context
      * @param width Screen width
+     * @param height Screen height
      * @param paddingX Horizontal padding
      * @param paddingY Vertical padding
      */
-    function drawCameraIcon(dc, width, paddingX, paddingY) {
+    function drawCameraIcon(dc, width, height, paddingX, paddingY) {
         if (cameraIcon != null) {
             var iconWidth = cameraIcon.getWidth();
             var iconHeight = cameraIcon.getHeight();
             
-            // Add padding from the edges
-            var cameraIconX = width - paddingX - (iconWidth / 2);
-            var cameraIconY = paddingY + (iconHeight / 2);
+            // Determine position based on subscreen availability
+            var cameraIconX, cameraIconY;
+            
+            if (subscreen != null) {
+                // Center the icon in the subscreen
+                var subscreenCenterX = (subscreen.x != null) ? 
+                    subscreen.x + (subscreen.width / 2) : width / 2;
+                var subscreenCenterY = (subscreen.y != null) ? 
+                    subscreen.y + (subscreen.height / 2) : height / 2;
+                
+                cameraIconX = subscreenCenterX;
+                cameraIconY = subscreenCenterY;
+                
+                System.println("Drawing camera icon in subscreen center: " + cameraIconX + "," + cameraIconY);
+            } else {
+                // Default positioning in top right corner
+                cameraIconX = width - paddingX - (iconWidth / 2);
+                cameraIconY = paddingY + (iconHeight / 2);
+                
+                System.println("Drawing camera icon in default position: " + cameraIconX + "," + cameraIconY);
+            }
             
             dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
             dc.drawBitmap(cameraIconX - (iconWidth / 2), cameraIconY - (iconHeight / 2), cameraIcon);

@@ -11,6 +11,7 @@ using Toybox.System;
  */
 class RecordingView extends BaseView {
     var videoIcon;
+    var subscreen;
     
     /**
      * Initialize the view
@@ -26,6 +27,14 @@ class RecordingView extends BaseView {
      */
     function onLayout(dc) {
         try {
+            // Check if this watch has a subscreen
+            subscreen = (WatchUi has :getSubscreen) ? WatchUi.getSubscreen() : null;
+            if (subscreen != null) {
+                System.println("Subscreen: " + subscreen.toString());
+            } else {
+                System.println("Subscreen: null");
+            }
+            
             // Load video icon
             videoIcon = WatchUi.loadResource(Rez.Drawables.VideoIcon);
         } catch(ex) {
@@ -50,8 +59,8 @@ class RecordingView extends BaseView {
             dc.setColor(Graphics.COLOR_BLACK, Graphics.COLOR_BLACK);
             dc.clear();
             
-            // Draw the video icon in the top right corner
-            drawVideoIcon(dc, width, paddingX, paddingY);
+            // Draw the video icon - now handles subscreen positioning
+            drawVideoIcon(dc, width, height, paddingX, paddingY);
             
             // Get and display recording time
             var timeStr = RecordingManager.getFormattedRecordingTime();
@@ -87,25 +96,47 @@ class RecordingView extends BaseView {
      * Helper function to draw the video icon with "REC" text
      * @param dc The device context
      * @param width Screen width
+     * @param height Screen height
      * @param paddingX Horizontal padding
      * @param paddingY Vertical padding
      */
-    function drawVideoIcon(dc, width, paddingX, paddingY) {
+    function drawVideoIcon(dc, width, height, paddingX, paddingY) {
         if (videoIcon != null) {
            var iconWidth = videoIcon.getWidth();
            var iconHeight = videoIcon.getHeight();
            
-           // Add padding from the edges
-           var videoIconX = width - paddingX - (iconWidth / 2);
-           var videoIconY = paddingY + (iconHeight / 2);
+           // Determine position based on subscreen availability
+           var videoIconX, videoIconY;
            
-           // Draw "REC" text to the left of the icon
-           dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
-           dc.drawText(videoIconX - (iconWidth / 2) - 5, videoIconY, Graphics.FONT_TINY, "REC", 
-              Graphics.TEXT_JUSTIFY_RIGHT | Graphics.TEXT_JUSTIFY_VCENTER);
-           
-           dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
-           dc.drawBitmap(videoIconX - (iconWidth / 2), videoIconY - (iconHeight / 2), videoIcon);
+           if (subscreen != null) {
+               // Center the icon in the subscreen
+               var subscreenCenterX = (subscreen.x != null) ? 
+                   subscreen.x + (subscreen.width / 2) : width / 2;
+               var subscreenCenterY = (subscreen.y != null) ? 
+                   subscreen.y + (subscreen.height / 2) : height / 2;
+               
+               videoIconX = subscreenCenterX;
+               videoIconY = subscreenCenterY;
+               
+               // Draw only the icon (no text) when using subscreen
+               dc.setColor(Graphics.COLOR_RED, Graphics.COLOR_TRANSPARENT);
+               dc.drawBitmap(videoIconX - (iconWidth / 2), videoIconY - (iconHeight / 2), videoIcon);
+               
+               System.println("Drawing video icon in subscreen center: " + videoIconX + "," + videoIconY);
+           } else {
+               // Default positioning in top right corner with "REC" text
+               videoIconX = width - paddingX - (iconWidth / 2);
+               videoIconY = paddingY + (iconHeight / 2);
+               
+               // Draw "REC" text to the left of the icon
+               dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);
+               dc.drawText(videoIconX - (iconWidth / 2) - 5, videoIconY, Graphics.FONT_TINY, "REC", 
+                  Graphics.TEXT_JUSTIFY_RIGHT | Graphics.TEXT_JUSTIFY_VCENTER);
+               
+               dc.drawBitmap(videoIconX - (iconWidth / 2), videoIconY - (iconHeight / 2), videoIcon);
+               
+               System.println("Drawing video icon in default position: " + videoIconX + "," + videoIconY);
+           }
         } else {
            // Fallback if icon isn't available
            dc.setColor(Graphics.COLOR_WHITE, Graphics.COLOR_TRANSPARENT);

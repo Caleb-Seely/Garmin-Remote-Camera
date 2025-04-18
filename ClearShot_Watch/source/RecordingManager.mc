@@ -13,6 +13,7 @@ class RecordingManager {
     static var recordingStartTime = 1; // to account for delay
     static var wasRecordingActive = false; // Flag to track if we just stopped recording
     static var lastCalculatedTime = 0; // Store last valid time to prevent jumps
+    static var LAG_COMPENSATION_MS = 500; // seconds of lag compensation
     
     /**
      * Start the recording timer
@@ -23,14 +24,12 @@ class RecordingManager {
             isRecordingActive = true;
             CountdownManager.isCountdownActive = false; // Ensure countdown is off
             
-            // IMPORTANT: Do not reset the timer if it's already set from handleRecordingStarted
-            // This was causing the issue with the timer not updating
-            if (recordingStartTime == 1) { // Only set if it hasn't been set yet
-                recordingStartTime = System.getTimer();
-            }
+            // Set recording start time with lag compensation
+            // This accounts for the 2-second lag by setting the start time earlier
+            recordingStartTime = System.getTimer() - LAG_COMPENSATION_MS;
             
             lastCalculatedTime = 0; // Reset the last calculated time
-            System.println("Recording started at " + recordingStartTime);
+            System.println("Recording started at " + recordingStartTime + " (with " + (LAG_COMPENSATION_MS/1000) + "s lag compensation)");
             return true;
         } catch (ex) {
             System.println("Error starting recording: " + ex.getErrorMessage());
@@ -54,50 +53,43 @@ class RecordingManager {
         }
     }
     
- /**
- * Get the elapsed recording time in seconds
- * @return Recording duration in seconds, or 0 if not recording
- */
-static function getRecordingElapsedTime() {
-    try {
-        // If recording is not active, check if we're in viewing mode after recording
-        if (!isRecordingActive && !wasRecordingActive) {
-            return 0;
+    /**
+     * Get the elapsed recording time in seconds
+     * @return Recording duration in seconds, or 0 if not recording
+     */
+    static function getRecordingElapsedTime() {
+        try {
+            // If recording is not active, check if we're in viewing mode after recording
+            if (!isRecordingActive && !wasRecordingActive) {
+                return 0;
+            }
+            
+            var currentTime = System.getTimer();
+            var elapsed = 0;
+            
+            // Calculate time difference in milliseconds
+            var diffMillis = 0;
+            if (currentTime >= recordingStartTime) {
+                diffMillis = currentTime - recordingStartTime;
+            } else {
+                // Timer rollover case (happens after ~71 minutes)
+                diffMillis = (0xFFFFFFFF - recordingStartTime + currentTime + 1);
+            }
+            
+            // Convert milliseconds to seconds by integer division
+            // System.getTimer() returns milliseconds, need to convert to true seconds
+            elapsed = (diffMillis / 1000).toNumber();
+            
+            // For debugging
+            System.println("Raw time: current=" + currentTime + " start=" + recordingStartTime + 
+                          " diffMillis=" + diffMillis + " elapsed=" + elapsed + "s");
+            
+            return elapsed;
+        } catch (ex) {
+            System.println("Error getting recording time: " + ex.getErrorMessage());
+            return lastCalculatedTime > 0 ? lastCalculatedTime : 0;
         }
-        
-        // CRITICAL: Make sure we have a valid start time
-        if (recordingStartTime <= 1) {
-            System.println("ERROR: recordingStartTime is invalid: " + recordingStartTime);
-            recordingStartTime = System.getTimer() - 1000; // Set a fallback time
-            System.println("Reset to: " + recordingStartTime);
-        }
-        
-        var currentTime = System.getTimer();
-        var elapsed = 0;
-        
-        // Calculate time difference in milliseconds
-        var diffMillis = 0;
-        if (currentTime >= recordingStartTime) {
-            diffMillis = currentTime - recordingStartTime;
-        } else {
-            // Timer rollover case (happens after ~71 minutes)
-            diffMillis = (0xFFFFFFFF - recordingStartTime + currentTime + 1);
-        }
-        
-        // Convert milliseconds to seconds by integer division
-        // System.getTimer() returns milliseconds, need to convert to true seconds
-        elapsed = (diffMillis / 1000).toNumber();
-        
-        // For debugging
-        System.println("Raw time: current=" + currentTime + " start=" + recordingStartTime + 
-                      " diffMillis=" + diffMillis + " elapsed=" + elapsed + "s");
-        
-        return elapsed;
-    } catch (ex) {
-        System.println("Error getting recording time: " + ex.getErrorMessage());
-        return lastCalculatedTime > 0 ? lastCalculatedTime : 0;
     }
-}
     
     /**
      * Format recording elapsed time as a string (mm:ss)
